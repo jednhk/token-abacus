@@ -1,0 +1,20 @@
+{
+  "name": "abacus-motion",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Abacus out/abacus.mp4",
+    "still": "remotion still Abacus out/still.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.532",
+    "@remotion/google-fonts": "^4.0.532",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.532"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}
