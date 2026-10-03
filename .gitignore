@@ -5,3 +5,11 @@ supabase/.temp/
 supabase/.branches/
 node_modules/
 dist/
+
+# web
+.next/
+out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
