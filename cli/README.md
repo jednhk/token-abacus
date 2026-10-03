@@ -1,4 +1,36 @@
-# token-abacus (CLI + local MCP server)
+# token-abacus
+
+Know what an AI coding task will cost **before** you run it.
+
+Before each task, your coding agent asks Token Abacus for a budget based on what similar tasks
+cost other people. After the task, the real cost (read exactly from your local session log) is
+recorded, so the next estimate is better.
+
+```bash
+npx token-abacus init
+```
+
+That adds the Token Abacus MCP server to Claude Code, Codex and Cursor (whichever you have) and
+asks whether to contribute anonymized task data. Restart your coding tool and start a task:
+
+> Estimate: ~$0.40 on claude-opus-5-5, budget 180k tokens, medium confidence.
+> Based on 12 similar tasks. Cheaper option: claude-sonnet-5-5 at ~$0.21.
+
+**What's uploaded** (only if you opt in): a one-sentence description of each task, the models
+used, exact token counts and timestamps. **Never uploaded:** code, file names, prompts, or
+anything that identifies you. Turn it off any time in `~/.token-abacus/config.json`.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `npx token-abacus init` | Add the MCP server to your coding tools (`--dry-run` to preview) |
+| `npx token-abacus import` | Turn your past Claude Code sessions into tasks with exact costs; previews first, `--upload` to contribute |
+| `npx token-abacus status` | Show your settings |
+
+---
+
+## Development
 
 Full design: [`docs/MCP.md`](../docs/MCP.md). This package is milestones 1–4 of that guide.
 

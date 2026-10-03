@@ -97,12 +97,23 @@ export function sessionFiles(sessionFile: string): string[] {
   return files;
 }
 
-/** Exact token usage per model between `start` and `end` (epoch ms), read from transcripts. */
-export async function readUsage(files: string[], start: number, end: number): Promise<ModelUsage[]> {
+/** One billed API request from a transcript. */
+export interface LoggedRequest {
+  time: number;
+  model: string;
+  /** [input, output, cache_read, cache_write, cache_write_1h, fast] */
+  row: number[];
+}
+
+/**
+ * Every billed request in the given transcripts between `start` and `end` (epoch ms), each
+ * requestId once (one API response is written as several lines with identical usage).
+ */
+export async function readRequests(files: string[], start = 0, end = Infinity): Promise<LoggedRequest[]> {
   const seen = new Set<string>();
-  const byModel = new Map<string, ModelUsage>();
+  const out: LoggedRequest[] = [];
   for (const file of files) {
-    if (!existsSync(file) || statSync(file).mtimeMs < start) continue;   // untouched since the task began
+    if (!existsSync(file) || statSync(file).mtimeMs < start) continue;   // untouched since the window began
     const lines = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
     for await (const line of lines) {
       if (!line.includes('"usage"')) continue;                           // cheap pre-filter on large logs
@@ -116,39 +127,63 @@ export async function readUsage(files: string[], start: number, end: number): Pr
       seen.add(requestId);
       const model: string = entry.message.model ?? "unknown";
       if (model === "<synthetic>") continue;                             // client-generated, not billed
-      const totals = byModel.get(model) ?? {
-        model, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0,
-        cache_write_1h_tokens: 0, requests: [],
-      };
-      const input = usage.input_tokens ?? 0;
-      const output = usage.output_tokens ?? 0;
-      const cacheRead = usage.cache_read_input_tokens ?? 0;
       const cacheWrite = usage.cache_creation_input_tokens ?? 0;
-      // 1-hour cache writes bill at a higher rate than 5-minute ones; Claude Code uses 1-hour.
-      const cacheWrite1h = Math.min(usage.cache_creation?.ephemeral_1h_input_tokens ?? 0, cacheWrite);
-      totals.input_tokens += input;
-      totals.output_tokens += output;
-      totals.cache_read_tokens += cacheRead;
-      totals.cache_write_tokens += cacheWrite;
-      totals.cache_write_1h_tokens += cacheWrite1h;
-      // Per request, so long-context tiers and fast mode (both decided per request) price exactly.
-      const fast = usage.speed === "fast" ? 1 : 0;
-      totals.requests!.push([input, output, cacheRead, cacheWrite, cacheWrite1h, fast]);
-      byModel.set(model, totals);
+      out.push({
+        time,
+        model,
+        row: [
+          usage.input_tokens ?? 0,
+          usage.output_tokens ?? 0,
+          usage.cache_read_input_tokens ?? 0,
+          cacheWrite,
+          // 1-hour cache writes bill at a higher rate than 5-minute ones; Claude Code uses 1-hour.
+          Math.min(usage.cache_creation?.ephemeral_1h_input_tokens ?? 0, cacheWrite),
+          usage.speed === "fast" ? 1 : 0,
+        ],
+      });
     }
+  }
+  return out;
+}
+
+/** Per-model totals plus per-request rows (long-context tiers and fast mode are per request). */
+export function summarize(requests: LoggedRequest[]): ModelUsage[] {
+  const byModel = new Map<string, ModelUsage>();
+  for (const { model, row } of requests) {
+    const totals = byModel.get(model) ?? {
+      model, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0,
+      cache_write_1h_tokens: 0, requests: [],
+    };
+    totals.input_tokens += row[0];
+    totals.output_tokens += row[1];
+    totals.cache_read_tokens += row[2];
+    totals.cache_write_tokens += row[3];
+    totals.cache_write_1h_tokens += row[4];
+    totals.requests!.push(row);
+    byModel.set(model, totals);
   }
   // Primary model (most output tokens) first.
   return [...byModel.values()].sort((a, b) => b.output_tokens - a.output_tokens);
 }
 
+/** Exact token usage per model between `start` and `end` (epoch ms), read from transcripts. */
+export async function readUsage(files: string[], start: number, end: number): Promise<ModelUsage[]> {
+  return summarize(await readRequests(files, start, end));
+}
+
+export interface Prompt {
+  time: number;
+  text: string;
+}
+
 /**
- * When the human typed each prompt in this session (epoch ms, ascending). Tool results and
- * injected meta lines are also written as `type: "user"`, so only text the person typed counts.
- * Task windows run from the prompt that started a task to the next prompt.
+ * The prompts the human typed in this session, ascending. Tool results and injected meta lines are
+ * also written as `type: "user"`, so only text the person typed counts. Task windows run from the
+ * prompt that started a task to the next prompt.
  */
-export async function promptTimes(sessionFile: string): Promise<number[]> {
-  const times: number[] = [];
-  if (!existsSync(sessionFile)) return times;
+export async function prompts(sessionFile: string): Promise<Prompt[]> {
+  const out: Prompt[] = [];
+  if (!existsSync(sessionFile)) return out;
   const lines = createInterface({ input: createReadStream(sessionFile), crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line.includes('"user"')) continue;
@@ -156,17 +191,23 @@ export async function promptTimes(sessionFile: string): Promise<number[]> {
     try { entry = JSON.parse(line); } catch { continue; }
     if (entry?.type !== "user" || entry.isMeta || entry.isSidechain) continue;
     const content = entry.message?.content;
-    const typed = typeof content === "string" ||
-      (Array.isArray(content) &&
-        content.some((b: { type?: string }) => b?.type === "text") &&
-        !content.some((b: { type?: string }) => b?.type === "tool_result"));
+    let text: string | null = null;
+    if (typeof content === "string") {
+      text = content;
+    } else if (Array.isArray(content) && !content.some((b: { type?: string }) => b?.type === "tool_result")) {
+      const parts = content.filter((b: { type?: string }) => b?.type === "text").map((b: { text?: string }) => b.text ?? "");
+      if (parts.length) text = parts.join("\n");
+    }
     const time = Date.parse(entry.timestamp);
-    if (typed && Number.isFinite(time)) times.push(time);
+    if (text !== null && Number.isFinite(time)) out.push({ time, text });
   }
-  return times.sort((a, b) => a - b);
+  return out.sort((a, b) => a.time - b.time);
 }
 
-/** The model of the most recent billed request in this session, or null. */
+export async function promptTimes(sessionFile: string): Promise<number[]> {
+  return (await prompts(sessionFile)).map((p) => p.time);
+}
+
 export async function currentModel(sessionFile: string): Promise<string | null> {
   if (!existsSync(sessionFile)) return null;
   let latest: string | null = null;

@@ -1,6 +1,7 @@
-import { statSync } from "node:fs";
+import { appendFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { submit, type ModelUsage, type SubmitPayload, type SubmitResponse } from "./api.js";
-import { loadConfig, log } from "./config.js";
+import { homeDir, loadConfig, log } from "./config.js";
 import { findLog, promptTimes, usageBetween } from "./harness/detect.js";
 import { getRun, removeRun, saveRun, type Run } from "./runs.js";
 import { scrub } from "./scrub.js";
@@ -9,6 +10,8 @@ export type Outcome = NonNullable<Run["outcome"]>;
 
 export interface CloseResult {
   usage: ModelUsage[] | null;
+  /** The log window that was measured, when the log could be read. */
+  window?: { start: number; end: number; logFile: string | null };
   /** False when the user turned contribution off: nothing was sent. */
   contributed: boolean;
   /** null when not contributed or the upload was queued for retry. */
@@ -56,6 +59,7 @@ export async function finalizeRun(
   const end = owned ? Date.now() : lastWrite(run.log_file) ?? Date.now();
   const result = await measureAndUpload(run, { owned, end, upperBound, timeoutMs });
   removeRun(run.run_id);                     // a failed upload is already queued in the outbox
+  if (result.window) recordHistory(run.run_id, result.window);
   return result;
 }
 
@@ -66,15 +70,17 @@ async function measureAndUpload(
   const logFile = owned ? (await findLog(run.harness, run.cwd)) ?? run.log_file : run.log_file;
 
   let usage: ModelUsage[] | null = null;
+  let measured: CloseResult["window"];
   try {
     const window = await taskWindow(run, logFile, end, upperBound);
     if (owned) lastBoundary = Math.max(lastBoundary, window.end);
     usage = await usageBetween(run.harness, logFile, window.start, window.end);
+    measured = { ...window, logFile };
   } catch (error) {
     log(`reading usage for ${run.run_id} failed: ${error}`);
   }
 
-  if (!loadConfig().contribute) return { usage, contributed: false, response: null };
+  if (!loadConfig().contribute) return { usage, window: measured, contributed: false, response: null };
 
   const payload: SubmitPayload = {
     run_id: run.run_id,
@@ -89,7 +95,22 @@ async function measureAndUpload(
     models: usage ?? [],
   };
   const response = await submit(payload, timeoutMs);
-  return { usage, contributed: true, response };
+  return { usage, window: measured, contributed: true, response };
+}
+
+/**
+ * Tasks this machine already recorded live, so `token-abacus import` doesn't upload them again
+ * from the same log. One JSON line per task in ~/.token-abacus/history.jsonl.
+ */
+function recordHistory(runId: string, window: NonNullable<CloseResult["window"]>): void {
+  if (!window.logFile || !Number.isFinite(window.end)) return;
+  try {
+    appendFileSync(join(homeDir(), "history.jsonl"),
+      `${JSON.stringify({ run_id: runId, log_file: window.logFile, start: window.start, end: window.end })}\n`,
+      { mode: 0o600 });
+  } catch (e) {
+    log(`writing history failed: ${e}`);
+  }
 }
 
 async function taskWindow(run: Run, logFile: string | null, end: number, upperBound?: number) {

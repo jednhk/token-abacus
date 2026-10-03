@@ -1,16 +1,28 @@
 #!/usr/bin/env node
 import { loadConfig, VERSION } from "./config.js";
+import { runImport } from "./import.js";
+import { runInit } from "./init.js";
 import { runMcpServer } from "./mcp/server.js";
 
 const USAGE = `token-abacus ${VERSION}
 
 Usage:
-  token-abacus mcp      Run the local MCP server (started by your coding tool)
-  token-abacus init     Add Token Abacus to your coding tools
-  token-abacus status   Show install id, contribution setting and API
+  token-abacus init [--yes] [--dry-run]   Add Token Abacus to Claude Code, Codex and Cursor
+  token-abacus import [--days N] [--upload] [--limit N]
+                                          Turn past Claude Code sessions into tasks with exact
+                                          costs; previews unless --upload is given
+  token-abacus status                     Show install id, contribution setting and API
+  token-abacus mcp                        Run the local MCP server (started by your coding tool)`;
 
-Add to Claude Code manually:
-  claude mcp add --scope user token-abacus -- npx -y token-abacus@latest mcp`;
+function flag(name: string): boolean {
+  return process.argv.includes(name);
+}
+
+function option(name: string): number | undefined {
+  const i = process.argv.indexOf(name);
+  const value = i >= 0 ? Number(process.argv[i + 1]) : NaN;
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -19,10 +31,10 @@ async function main(): Promise<void> {
       await runMcpServer();
       break;
     case "init":
-      // TODO(MCP teammate, milestone 7): detect tools, ask for consent, write their MCP configs.
-      loadConfig();
-      console.log("init is not implemented yet. For now:\n");
-      console.log("  claude mcp add --scope user token-abacus -- npx -y token-abacus@latest mcp");
+      await runInit({ yes: flag("--yes"), dryRun: flag("--dry-run") });
+      break;
+    case "import":
+      await runImport({ days: option("--days"), limit: option("--limit"), upload: flag("--upload") });
       break;
     case "status": {
       const config = loadConfig();

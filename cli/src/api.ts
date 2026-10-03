@@ -106,6 +106,14 @@ export async function submit(payload: SubmitPayload, timeoutMs = SUBMIT_TIMEOUT_
   }
 }
 
+/** Upload many tasks at once (token-abacus import). Throws on failure; the import can be re-run. */
+export async function submitBatch(payloads: (SubmitPayload & { source?: string })[]): Promise<(SubmitResponse | { status: "rejected"; error: string; cost_usd?: null })[]> {
+  if (baseUrl() === "mock") return payloads.map(mockSubmit);
+  const { results } = await post<{ results: (SubmitResponse | { status: "rejected"; error: string })[] }>(
+    "submit", { runs: payloads }, 60_000);
+  return results;
+}
+
 function outboxPath(): string {
   return join(homeDir(), "outbox.jsonl");
 }

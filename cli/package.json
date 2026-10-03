@@ -1,13 +1,14 @@
 {
   "name": "token-abacus",
   "version": "0.1.0",
-  "description": "Estimate what an AI coding task will cost before you run it, and record what it really cost after.",
+  "description": "Know what an AI coding task will cost before you run it. Local MCP server for Claude Code, Codex and Cursor.",
   "type": "module",
   "bin": {
     "token-abacus": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "engines": {
     "node": ">=20"
@@ -16,7 +17,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "test": "node --import tsx --test test/*.test.ts",
-    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/cli.js mcp"
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/cli.js mcp",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",
@@ -27,5 +29,21 @@
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "claude-code",
+    "codex",
+    "cursor",
+    "tokens",
+    "cost",
+    "llm",
+    "budget"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jednhk/token-abacus.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/jednhk/token-abacus#readme"
 }
