@@ -276,6 +276,11 @@ export type Estimate = {
     p50_tokens: number; p85_tokens: number; p50_usd: number; p85_usd: number;
   }[];
   similar_tasks: { title: string; model: string; total_tokens: number; cost_usd: number; similarity: number }[];
+  // Only when you send "model": false = no similar tasks on that model yet (the recommendation is
+  // the cheapest reliable model instead).
+  for_requested_model?: boolean;
+  // A cheaper reliable model than the recommendation, if any.
+  alternative: (NonNullable<Estimate["recommendation"]> & { n: number; success_rate: number | null }) | null;
 };
 ```
 
