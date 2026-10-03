@@ -1,0 +1,22 @@
+{
+  "name": "token-abacus-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts Launch out/launch.mp4",
+    "still": "remotion still src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.532",
+    "@remotion/google-fonts": "^4.0.532",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.532"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2"
+  }
+}
