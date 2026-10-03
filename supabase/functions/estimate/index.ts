@@ -9,8 +9,9 @@ import { error, json, rateLimited, readJson } from "../_shared/http.ts";
 // while unrelated requests (a website, OAuth login, a blog post) top out at 0.73–0.78 against it.
 // Below the threshold there is no estimate — an honest "none" beats a confident wrong number.
 const THRESHOLD = 0.80;            // similarity needed to count as "a similar task"
-const NEIGHBORS = 300;             // rows, not distinct tasks: imports repeat a task across many models
-const MIN_TASKS = 3;               // a model needs this many similar tasks to be recommended
+const NEIGHBORS = 50;              // distinct tasks (the search runs over task_vectors)
+const CLUSTER_BAND = 0.05;         // only tasks within this much of the best match count
+const SOLID_TASKS = 3;             // models with this many similar tasks are preferred when any exist
 const MIN_SUCCESS_RATE = 0.7;
 const HEADROOM = 1.15;             // budget = p85 × 1.15
 
@@ -48,7 +49,12 @@ async function stats(vector: number[], threshold: number): Promise<StatsRow[]> {
 }
 
 function candidates(rows: StatsRow[]): StatsRow[] {
-  return rows.filter((r) => r.n >= MIN_TASKS && r.p85_tokens !== null);
+  // One similar task is enough for an estimate (confidence says how much to trust it), but a
+  // single lucky run must not beat a model with real history: use well-evidenced models when
+  // there are any.
+  const usable = rows.filter((r) => r.n >= 1 && r.p85_tokens !== null);
+  const solid = usable.filter((r) => r.n >= SOLID_TASKS);
+  return solid.length > 0 ? solid : usable;
 }
 
 /** Cheapest model that usually succeeds; the user's own model if it has enough data. */
@@ -66,7 +72,7 @@ function pick(rows: StatsRow[], requested?: string): StatsRow | null {
 }
 
 function confidence(row: StatsRow): "high" | "medium" | "low" {
-  if (row.n < 5) return "low";
+  if (row.n < SOLID_TASKS) return "low";
   const spread = row.p50_tokens ? row.p85_tokens! / row.p50_tokens : Infinity;
   if (row.n >= 10 && row.avg_similarity >= 0.85 && spread < 2) return "high";
   return "medium";
@@ -83,11 +89,15 @@ Deno.serve(async (req) => {
 
   try {
     const vector = await embed(prompt);
-    const [rows, matchResult] = await Promise.all([
-      stats(vector, THRESHOLD),
-      db.rpc("match_runs", { query_embedding: JSON.stringify(vector), match_count: 100 }),
-    ]);
+    const matchResult = await db.rpc("match_runs", { query_embedding: JSON.stringify(vector), match_count: 5 });
     if (matchResult.error) throw matchResult.error;
+    const matches = (matchResult.data ?? []) as MatchRow[];
+
+    // Estimate from the cluster around the best match, not from everything above the threshold:
+    // one task at 0.97 says more than many loosely related tasks at 0.80.
+    const best = matches[0]?.similarity ?? 0;
+    const cutoff = Math.max(THRESHOLD, best - CLUSTER_BAND);
+    const rows = best >= THRESHOLD ? await stats(vector, cutoff) : [];
 
     const chosen = pick(candidates(rows), requested);
     const budgetTokens = chosen && Math.round(chosen.p85_tokens! * HEADROOM);
@@ -96,8 +106,8 @@ Deno.serve(async (req) => {
     // One entry per distinct task (imports repeat a task across models), preferring the run on the
     // recommended model so the example matches the recommendation.
     const byTask = new Map<string, MatchRow>();
-    for (const m of (matchResult.data ?? []) as MatchRow[]) {
-      if (m.similarity < THRESHOLD) continue;
+    for (const m of matches) {
+      if (m.similarity < cutoff) continue;
       const seen = byTask.get(m.task);
       if (!seen || (chosen && m.primary_model === chosen.model && seen.primary_model !== chosen.model)) {
         byTask.set(m.task, m);
@@ -131,6 +141,14 @@ Deno.serve(async (req) => {
         p85_usd: round2(r.p85_cost),
       })),
       similar_tasks: similar,
+      // { "debug": true } shows the nearest tasks regardless of threshold, for tuning.
+      ...(body.debug === true ? {
+        debug: {
+          cutoff: Math.round(cutoff * 1000) / 1000,
+          nearest: [...new Map(matches.map((m) => [m.task, m.similarity])).entries()]
+            .map(([task, similarity]) => ({ task, similarity: Math.round(similarity * 1000) / 1000 })),
+        },
+      } : {}),
     });
   } catch (e) {
     console.error(`estimate failed: ${e instanceof Error ? e.message : JSON.stringify(e)}`);

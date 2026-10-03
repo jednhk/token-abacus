@@ -145,8 +145,18 @@ Estimates come from the `estimate` Edge Function (see FRONTEND.md §8), not from
 | `duration_s` | integer | **Generated:** `ended_at − started_at` |
 | `created_at`, `updated_at` | timestamptz | |
 
-Indexes: HNSW on `embedding` (cosine), `primary_model`, `created_at desc`, and a partial index on
-rows still missing an embedding.
+Indexes: `primary_model`, `created_at desc`, and a partial index on rows still missing an embedding.
+
+### `task_vectors` — one embedding per distinct task text (search index)
+
+| Column | Type | Notes |
+|---|---|---|
+| `task` | text PK | Same text as `runs.task` |
+| `embedding` | vector(384) | Copied from `runs.embedding` by a trigger; never write it directly |
+
+Similarity search runs here, as an exact scan (a few ms at this size), then joins back to `runs`.
+Imports repeat each task across many models with identical embeddings, which broke the HNSW
+index on `runs`; an approximate index is worth revisiting only past ~100k distinct tasks.
 
 ### `run_models` — one row per model per task
 

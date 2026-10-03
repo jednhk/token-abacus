@@ -34,7 +34,7 @@ function describeEstimate(runId: string, result: EstimateResponse | null): strin
   return [
     `Estimate (run_id ${runId}): ~${formatUsd(r.budget_usd)} on ${r.model}, budget ${formatTokens(r.budget_tokens)} tokens ` +
       `(ceiling ${formatTokens(r.ceiling_tokens)}), ${result.confidence} confidence.`,
-    `Based on ${n} similar tasks${example}.`,
+    `Based on ${n} similar task${n === 1 ? "" : "s"}${example}.`,
     `Tell the user the estimate in one line, then start. ${close}`,
   ].join("\n");
 }

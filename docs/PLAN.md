@@ -123,12 +123,12 @@ verification off, header `x-abacus-install: <install_id>` for rate limiting.
 | Step | Rule |
 |---|---|
 | Find similar tasks | 50 nearest by meaning, keep similarity ≥ 0.80, drop flagged and pending rows |
-| Candidate models | at least 3 similar tasks |
+| Candidate models | at least 1 similar task; models with ≥ 3 are preferred when any exist |
 | Recommended model | cheapest median cost among models with ≥ 70% success (or the model the user is running) |
 | Budget | 85th-percentile tokens × 1.15 — enough for ~85% of similar tasks, plus headroom |
 | Ceiling | 95th percentile |
-| Confidence | high: ≥ 10 tasks, high similarity, p85 < 2 × p50 · low: few tasks or wide spread |
-| Too few matches | retry with similarity ≥ 0.70, mark confidence low |
+| Confidence | low: 1–2 tasks · medium: 3–9 · high: ≥ 10 tasks, high similarity, p85 < 2 × p50 |
+| No similar task | no estimate (`confidence: "none"`) — unrelated requests score below 0.80 against the data |
 
 Percentiles use successful tasks only. Budgets are shown in USD first, tokens second — cache reads
 dominate raw token counts, so dollars are what users understand.
