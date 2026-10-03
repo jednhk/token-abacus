@@ -1,3 +1,4 @@
+import { CommunitySupport } from "@/components/community-support";
 import { HomeStudio } from "@/components/home-studio";
 import { Mascot } from "@/components/mascot";
 import { SiteHeader } from "@/components/site-header";
@@ -25,6 +26,7 @@ export default async function Home() {
           <HomeStudio />
         </div>
         <TaskFeed feed={feed} />
+        <CommunitySupport />
       </main>
       <footer className="border-t border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
         Abacus estimates tokens before you spend them.

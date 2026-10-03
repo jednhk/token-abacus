@@ -29,32 +29,32 @@ export type Starter = {
 export const developerStarters: Starter[] = [
   {
     id: "cost",
-    label: "How many tokens will this cost?",
-    prompt: "How many tokens will this cost?",
+    label: "What will a waitlist page cost?",
+    prompt: "What will a waitlist page cost?",
   },
   {
     id: "model",
-    label: "Which model is cheaper for this?",
-    prompt: "Which model is cheaper for this?",
+    label: "Can Haiku ship my checkout?",
+    prompt: "Can Haiku ship my checkout?",
   },
   {
     id: "trim",
-    label: "Trim this so it still works",
-    prompt: "Trim this so it still works",
+    label: "Cut this Cursor chat and still ship?",
+    prompt: "Cut this Cursor chat and still ship?",
   },
   {
     id: "split",
-    label: "Split this into a cheap first pass",
-    prompt: "Split this into a cheap first pass",
+    label: "Plan the MVP, then code one screen?",
+    prompt: "Plan the MVP, then code one screen?",
   },
 ];
 
 const replies: Record<string, Reply> = {
-  "How many tokens will this cost?": {
+  "What will a waitlist page cost?": {
     summary:
-      "The task itself is small. The tokens pile up in the context pasted around it.",
+      "The page itself is small. The tokens pile up in the brand notes pasted around it.",
     recommendation:
-      "Send the question first, and only the files that answer depends on.",
+      "Send the page goal first, and only the copy the hero depends on.",
     lines: [
       { label: "Task only", tokens: 220 },
       { label: "Typical attached context", tokens: 2400 },
@@ -62,11 +62,11 @@ const replies: Record<string, Reply> = {
     ],
     suggested: 640,
   },
-  "Which model is cheaper for this?": {
+  "Can Haiku ship my checkout?": {
     summary:
-      "A draft or a routing step does fine on a small model. Keep the larger model for the check.",
+      "The checkout form is fine on a small model. Keep the larger model for the webhook check.",
     recommendation:
-      "Write the first pass on a small model, and escalate only if that pass misses.",
+      "Draft checkout on Haiku, and escalate only if the webhook pass misses.",
     lines: [
       { label: "Small-model draft", tokens: 260 },
       { label: "Large-model redo", tokens: 1100 },
@@ -74,11 +74,11 @@ const replies: Record<string, Reply> = {
     ],
     suggested: 420,
   },
-  "Trim this so it still works": {
+  "Cut this Cursor chat and still ship?": {
     summary:
-      "Most prompts say the goal, the constraints, and the context twice.",
+      "The feature is cheap. The Cursor thread around it is what you keep paying to reread.",
     recommendation:
-      "Keep the goal and the constraints. Point at the context instead of pasting it.",
+      "Keep the goal and the latest decision. Drop the old tool output.",
     lines: [
       { label: "Original prompt", tokens: 1800 },
       { label: "Repeated instructions", tokens: 700 },
@@ -86,11 +86,11 @@ const replies: Record<string, Reply> = {
     ],
     suggested: 540,
   },
-  "Split this into a cheap first pass": {
+  "Plan the MVP, then code one screen?": {
     summary:
-      "One giant request spends tokens on planning and writing at the same time.",
+      "One giant request spends tokens planning the whole app and coding it at the same time.",
     recommendation:
-      "Ask for an outline first. Generate the full piece only for the parts you keep.",
+      "Ask for the screen list first. Code only the screen you are shipping tonight.",
     lines: [
       { label: "One-shot request", tokens: 2200 },
       { label: "Outline pass", tokens: 180 },
