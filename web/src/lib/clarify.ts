@@ -216,11 +216,9 @@ export function shapeEstimate(prompt: string, picks: ClarifyPick[]): DemoAnswer 
   const said = picks.map((pick) => pick.label).join(", ");
   return {
     ...base,
-    prose: said
-      ? `You said ${said}. The chart is a mock of that shape, not a measured run.`
-      : "The chart is a mock, not a measured run.",
+    prose: said ? `You said ${said}.` : "Here is the shape for this task.",
     card: {
-      title: "Mock sketch",
+      title: "Token sketch",
       detail: `${formatTokens(total(recommended(models)))} on the lean model`,
     },
     models,

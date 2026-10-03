@@ -5,7 +5,7 @@ import type { RecentRun } from "./types";
 
 export type TaskFeed = {
   runs: RecentRun[];
-  source: "live" | "sample";
+  source: "live" | "sample" | "examples";
   insight: FeedInsight;
 };
 

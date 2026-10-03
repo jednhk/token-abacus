@@ -26,6 +26,10 @@ export type Starter = {
   prompt: string;
 };
 
+export type InputMode = "prompt" | "natural";
+
+export const promptPlaceholder = "Paste in your AI prompt for the task";
+
 export const developerStarters: Starter[] = [
   {
     id: "cost",

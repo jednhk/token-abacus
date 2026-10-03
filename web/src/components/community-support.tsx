@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 
-const amounts = [5, 10, 25];
-
-export function CommunitySupport() {
-  const [amount, setAmount] = useState(10);
+export function CommunitySupport({ thanked = false }: { thanked?: boolean }) {
+  const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
 
   return (
-    <section className="px-4 pb-16 sm:px-6" aria-labelledby="support-title">
+    <section id="support" className="px-4 pb-16 sm:px-6" aria-labelledby="support-title">
       <div className="mx-auto flex max-w-3xl flex-col gap-4 rounded-3xl border border-neutral-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -19,43 +17,37 @@ export function CommunitySupport() {
             <StripeMark />
           </div>
           <p className="mt-1 max-w-md text-sm leading-6 text-neutral-500">
-            A small donation keeps the public task feed going. This checkout is a sandbox demo.
+            {thanked
+              ? "Thank you. Stripe received the donation."
+              : "A small donation keeps the public task feed going."}
           </p>
         </div>
         <form
-          className="flex flex-col items-stretch gap-2 sm:items-end"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            setNotice(
-              `Sandbox demo. A $${amount} donation is not charged. Stripe Checkout is not connected yet.`,
-            );
+            if (pending) return;
+            setPending(true);
+            setNotice("");
+            try {
+              const response = await fetch("/api/donate", { method: "POST" });
+              const body = (await response.json()) as { url?: string; error?: string };
+              if (body.url) {
+                window.location.assign(body.url);
+                return;
+              }
+              setNotice(body.error || "Checkout could not be opened.");
+            } catch {
+              setNotice("Checkout could not be opened.");
+            }
+            setPending(false);
           }}
         >
-          <div className="flex gap-1.5" role="group" aria-label="Donation amount">
-            {amounts.map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={amount === value}
-                className={`rounded-full border px-3 py-1.5 text-sm ${
-                  amount === value
-                    ? "border-black bg-black text-white"
-                    : "border-neutral-200 hover:border-black"
-                }`}
-                onClick={() => {
-                  setAmount(value);
-                  setNotice("");
-                }}
-              >
-                ${value}
-              </button>
-            ))}
-          </div>
           <button
             type="submit"
-            className="rounded-full bg-[#635bff] px-4 py-2 text-sm font-medium text-white hover:bg-[#5851ea]"
+            disabled={pending}
+            className="rounded-full bg-[#635bff] px-4 py-2 text-sm font-medium text-white hover:bg-[#5851ea] disabled:opacity-60"
           >
-            Donate ${amount}
+            {pending ? "Opening checkout…" : "Donate"}
           </button>
         </form>
       </div>

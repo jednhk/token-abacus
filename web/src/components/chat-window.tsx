@@ -4,28 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Mascot } from "@/components/mascot";
 import { UsageChart } from "@/components/usage-chart";
-import {
-  questionsFor,
-  shapeEstimate,
-  type ClarifyChoice,
-  type ClarifyPick,
-  type ClarifyQuestion,
-} from "@/lib/clarify";
+import { VoiceBar } from "@/components/voice-bar";
+import { demoAnswer, type DemoAnswer, type SolutionPoint } from "@/lib/demo-answer";
 import { formatTokens } from "@/lib/format";
-import { type DemoAnswer, type SolutionPoint } from "@/lib/demo-answer";
 
 type ChatItem =
   | { id: string; kind: "user"; text: string }
-  | { id: string; kind: "note"; text: string }
-  | {
-      id: string;
-      kind: "ask";
-      question: ClarifyQuestion;
-      step: number;
-      total: number;
-      locked: boolean;
-      picked?: string;
-    }
   | {
       id: string;
       kind: "estimate";
@@ -48,13 +32,10 @@ export function ChatWindow({ prompt }: { prompt: string }) {
   const [pending, setPending] = useState(false);
   const [recents, setRecents] = useState<RecentChat[]>([]);
   const [navOpen, setNavOpen] = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voiceNote, setVoiceNote] = useState("");
   const thread = useRef<HTMLDivElement>(null);
   const request = useRef(0);
-  const topic = useRef(opening);
-  const plan = useRef<ClarifyQuestion[]>(opening ? questionsFor(opening) : []);
-  const picks = useRef<ClarifyPick[]>([]);
-  const busy = useRef(false);
 
   useEffect(() => {
     if (opening) setRecents(remember(opening));
@@ -66,57 +47,18 @@ export function ChatWindow({ prompt }: { prompt: string }) {
     latest?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [items]);
 
-  function reply(askId: string, choice: ClarifyChoice) {
-    if (pending || busy.current) return;
-    busy.current = true;
-    const ask = items.find((item) => item.id === askId && item.kind === "ask" && !item.locked);
-    if (!ask || ask.kind !== "ask") {
-      busy.current = false;
-      return;
-    }
-    picks.current = [...picks.current, { ask: ask.question.ask, label: choice.label, weight: choice.weight }];
-    const nextStep = ask.step + 1;
-    const estimateId = crypto.randomUUID();
-    setItems((current) => {
-      const locked = current.map((item) =>
-        item.id === askId && item.kind === "ask"
-          ? { ...item, locked: true, picked: choice.label }
-          : item,
-      );
-      const user = { id: crypto.randomUUID(), kind: "user" as const, text: choice.label };
-      if (nextStep <= ask.total) {
-        return [
-          ...locked,
-          user,
-          {
-            id: crypto.randomUUID(),
-            kind: "ask" as const,
-            question: plan.current[ask.step],
-            step: nextStep,
-            total: ask.total,
-            locked: false,
-          },
-        ];
-      }
-      return [
-        ...locked,
-        user,
-        { id: estimateId, kind: "estimate" as const, phase: "searching" as const, prose: "" },
-      ];
-    });
-    setDraft("");
-    setVoiceOpen(false);
-    if (nextStep > ask.total) {
-      const ticket = ++request.current;
-      setPending(true);
-      void finish(estimateId, ticket);
-      return;
-    }
-    busy.current = false;
-  }
+  useEffect(() => {
+    if (!opening) return;
+    const ticket = ++request.current;
+    setPending(true);
+    void finish("opening-estimate", opening, ticket);
+    return () => {
+      request.current += 1;
+    };
+  }, [opening]);
 
-  async function finish(id: string, ticket: number) {
-    const answer = shapeEstimate(topic.current, picks.current);
+  async function finish(id: string, text: string, ticket: number) {
+    const answer = demoAnswer(text);
     await wait(900);
     if (request.current !== ticket) return;
     setItems((current) =>
@@ -127,49 +69,26 @@ export function ChatWindow({ prompt }: { prompt: string }) {
       ),
     );
     setPending(false);
-    busy.current = false;
-  }
-
-  function beginTopic(text: string) {
-    topic.current = text;
-    plan.current = questionsFor(text);
-    picks.current = [];
-    const questions = plan.current;
-    setItems((current) => [
-      ...current,
-      { id: crypto.randomUUID(), kind: "user", text },
-      {
-        id: crypto.randomUUID(),
-        kind: "note",
-        text: "A few questions first. An estimate before that would be a guess.",
-      },
-      {
-        id: crypto.randomUUID(),
-        kind: "ask",
-        question: questions[0],
-        step: 1,
-        total: questions.length,
-        locked: false,
-      },
-    ]);
-    setDraft("");
-    setVoiceOpen(false);
-    setRecents(remember(text));
   }
 
   function send(text: string) {
     const value = text.trim();
     if (!value || pending) return;
-    const open = [...items].reverse().find((item) => item.kind === "ask" && !item.locked);
-    if (open && open.kind === "ask") {
-      reply(open.id, { label: value, weight: 1 });
-      return;
-    }
-    beginTopic(value);
+    const estimateId = crypto.randomUUID();
+    setItems((current) => [
+      ...current,
+      { id: crypto.randomUUID(), kind: "user", text: value },
+      { id: estimateId, kind: "estimate", phase: "searching", prose: "" },
+    ]);
+    setDraft("");
+    setVoiceNote("");
+    setRecents(remember(value));
+    const ticket = ++request.current;
+    setPending(true);
+    void finish(estimateId, value, ticket);
   }
 
   const title = opening || "New chat";
-  const asking = items.some((item) => item.kind === "ask" && !item.locked);
 
   return (
     <div className="flex h-dvh bg-white text-neutral-950">
@@ -222,12 +141,6 @@ export function ChatWindow({ prompt }: { prompt: string }) {
                         </p>
                       </div>
                     ) : null}
-                    {item.kind === "note" ? (
-                      <p className="max-w-[40rem] text-[15px] leading-7 text-neutral-700">{item.text}</p>
-                    ) : null}
-                    {item.kind === "ask" ? (
-                      <QuestionCard item={item} onPick={(choice) => reply(item.id, choice)} />
-                    ) : null}
                     {item.kind === "estimate" && item.phase === "searching" ? (
                       <p className="text-[15px] text-neutral-400" aria-live="polite">
                         Searching other cases...
@@ -254,46 +167,73 @@ export function ChatWindow({ prompt }: { prompt: string }) {
           }}
         >
           <div className="rounded-[28px] border border-neutral-200 bg-white px-4 pt-3 pb-2 shadow-[0_8px_30px_rgba(0,0,0,0.05)]">
-            <label htmlFor="chat-prompt" className="sr-only">
-              Describe what you&apos;re building
-            </label>
-            <textarea
-              id="chat-prompt"
-              rows={2}
-              value={draft}
-              placeholder={asking ? "Or type your own answer..." : "Describe what you're building..."}
-              className="max-h-40 min-h-12 w-full resize-none bg-transparent py-1 text-base leading-6 outline-none placeholder:text-neutral-400"
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  send(draft);
-                }
-              }}
-            />
-            <div className="flex items-center justify-end gap-1 pb-1">
-              <button
-                type="button"
-                aria-label="Start a voice call"
-                aria-pressed={voiceOpen}
-                className="grid h-9 w-9 place-items-center rounded-full text-neutral-700 hover:bg-neutral-100"
-                onClick={() => setVoiceOpen((open) => !open)}
-              >
-                <MicIcon />
-              </button>
-              <button
-                type="submit"
-                aria-label="Send"
-                disabled={!draft.trim() || pending}
-                className="grid h-9 w-9 place-items-center rounded-full bg-black text-white hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-400"
-              >
-                <ArrowUpIcon />
-              </button>
-            </div>
+            {recording ? (
+              <div className="flex items-center py-1">
+                <VoiceBar
+                  onCancel={() => setRecording(false)}
+                  onConfirm={(transcript) => {
+                    setRecording(false);
+                    if (!transcript) {
+                      setVoiceNote("No speech picked up.");
+                      return;
+                    }
+                    setVoiceNote("");
+                    setDraft((current) =>
+                      current.trim() ? `${current.trim()} ${transcript}` : transcript,
+                    );
+                  }}
+                  onError={(message) => {
+                    setRecording(false);
+                    setVoiceNote(message);
+                  }}
+                />
+              </div>
+            ) : (
+              <>
+                <label htmlFor="chat-prompt" className="sr-only">
+                  Describe what you&apos;re building
+                </label>
+                <textarea
+                  id="chat-prompt"
+                  rows={2}
+                  value={draft}
+                  placeholder="Describe what you're building..."
+                  className="max-h-40 min-h-12 w-full resize-none bg-transparent py-1 text-base leading-6 outline-none placeholder:text-neutral-400"
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      send(draft);
+                    }
+                  }}
+                />
+                <div className="flex items-center justify-end gap-1 pb-1">
+                  <button
+                    type="button"
+                    aria-label="Dictate"
+                    className="grid h-9 w-9 place-items-center rounded-full text-neutral-700 hover:bg-neutral-100"
+                    onClick={() => {
+                      setVoiceNote("");
+                      setRecording(true);
+                    }}
+                  >
+                    <MicIcon />
+                  </button>
+                  <button
+                    type="submit"
+                    aria-label="Send"
+                    disabled={!draft.trim() || pending}
+                    className="grid h-9 w-9 place-items-center rounded-full bg-black text-white hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-400"
+                  >
+                    <ArrowUpIcon />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-          {voiceOpen ? (
+          {voiceNote ? (
             <p className="px-2 pt-2 text-sm text-neutral-500" aria-live="polite">
-              Voice calls are coming soon.
+              {voiceNote}
             </p>
           ) : null}
         </form>
@@ -374,10 +314,10 @@ function SolutionDiagram({ answer }: { answer: DemoAnswer }) {
     <section className="rounded-[28px] border border-neutral-200 bg-white px-4 py-5 sm:px-6 sm:py-6">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[15px] font-medium">Average tokens</h2>
-        <p className="text-xs text-neutral-400">Mock · this task</p>
+        <p className="text-xs text-neutral-400">This task</p>
       </div>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-500">
-        Mock sketch. {leanModel.name} is the lean model at {formatTokens(total(leanModel))}.{" "}
+        {leanModel.name} is the lean model at {formatTokens(total(leanModel))}.{" "}
         {heavyModel.name} is the heavy one at {formatTokens(total(heavyModel))}. {leanSetup.name}{" "}
         is the leaner setup at {formatTokens(total(leanSetup))}.
       </p>
@@ -461,61 +401,10 @@ function remember(prompt: string) {
 }
 
 function openingThread(prompt: string): ChatItem[] {
-  const questions = questionsFor(prompt);
   return [
     { id: "opening-user", kind: "user", text: prompt },
-    {
-      id: "opening-note",
-      kind: "note",
-      text: "A few questions first. An estimate before that would be a guess.",
-    },
-    {
-      id: "opening-q",
-      kind: "ask",
-      question: questions[0],
-      step: 1,
-      total: questions.length,
-      locked: false,
-    },
+    { id: "opening-estimate", kind: "estimate", phase: "searching", prose: "" },
   ];
-}
-
-function QuestionCard({
-  item,
-  onPick,
-}: {
-  item: Extract<ChatItem, { kind: "ask" }>;
-  onPick: (choice: ClarifyChoice) => void;
-}) {
-  return (
-    <div className="max-w-[40rem] rounded-2xl border border-neutral-200 px-4 py-4">
-      <p className="text-xs font-medium text-neutral-400">
-        {item.step} of {item.total}
-      </p>
-      <p className="mt-1 text-[15px] font-medium">{item.question.ask}</p>
-      <div className="mt-3 flex flex-col gap-2">
-        {item.question.choices.map((choice, index) => {
-          const selected = item.picked === choice.label;
-          return (
-            <button
-              key={choice.label}
-              type="button"
-              disabled={item.locked}
-              onClick={() => onPick(choice)}
-              className={`rounded-xl border px-3 py-2 text-left text-sm ${
-                selected
-                  ? "border-black bg-neutral-50"
-                  : "border-neutral-200 hover:border-black disabled:hover:border-neutral-200"
-              } disabled:cursor-default`}
-            >
-              <span className="mr-2 text-neutral-400">{index + 1}</span>
-              {choice.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function wait(ms: number) {

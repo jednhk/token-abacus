@@ -1,14 +1,19 @@
 import { CommunitySupport } from "@/components/community-support";
-import { HomeStudio } from "@/components/home-studio";
+import { HomeBoard } from "@/components/home-board";
 import { Mascot } from "@/components/mascot";
 import { SiteHeader } from "@/components/site-header";
-import { TaskFeed } from "@/components/task-feed";
-import { loadTaskFeed } from "@/lib/runs";
+// import { loadTaskFeed } from "@/lib/runs";
 
 export const revalidate = 30;
 
-export default async function Home() {
-  const feed = await loadTaskFeed();
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ donated?: string | string[] }>;
+}) {
+  const query = await searchParams;
+  const donated = (Array.isArray(query.donated) ? query.donated[0] : query.donated) === "1";
+  // const feed = await loadTaskFeed();
   return (
     <>
       <SiteHeader />
@@ -23,10 +28,9 @@ export default async function Home() {
           </p>
         </section>
         <div className="mt-8">
-          <HomeStudio />
+          <HomeBoard />
         </div>
-        <TaskFeed feed={feed} />
-        <CommunitySupport />
+        <CommunitySupport thanked={donated} />
       </main>
       <footer className="border-t border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
         Abacus estimates tokens before you spend them.

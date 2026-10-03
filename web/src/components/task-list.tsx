@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatTokens, formatUsd, timeAgo } from "@/lib/format";
 import type { RecentRun } from "@/lib/types";
 
@@ -12,6 +12,7 @@ export function TaskList({ runs }: { runs: RecentRun[] }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [open, setOpen] = useState<RecentRun | null>(null);
 
   const categories = useMemo(() => topCategories(runs), [runs]);
   const active = categories.some((item) => item.id === category) ? category : null;
@@ -88,7 +89,11 @@ export function TaskList({ runs }: { runs: RecentRun[] }) {
       ) : (
         <ul className="mt-2 divide-y divide-neutral-200">
           {visible.map((run) => (
-            <TaskRow key={`${run.created_at}-${run.task}`} run={run} />
+            <TaskRow
+              key={`${run.created_at}-${run.task}`}
+              run={run}
+              onOpen={run.summary ? () => setOpen(run) : undefined}
+            />
           ))}
         </ul>
       )}
@@ -142,6 +147,7 @@ export function TaskList({ runs }: { runs: RecentRun[] }) {
           </div>
         </nav>
       ) : null}
+      {open?.summary ? <PromptDialog run={open} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }
@@ -195,18 +201,29 @@ function CategoryChip({
   );
 }
 
-function TaskRow({ run }: { run: RecentRun }) {
+function TaskRow({ run, onOpen }: { run: RecentRun; onOpen?: () => void }) {
   const model = run.primary_model ?? run.models?.[0]?.model ?? "Unknown model";
   const extra = Math.max(0, (run.models?.length ?? 0) - 1);
   const flag = run.outcome === "failed" || run.outcome === "abandoned" || run.outcome === "partial";
+  const title = onOpen ? (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="line-clamp-3 w-full text-left font-medium leading-6 hover:underline"
+    >
+      {run.summary}
+    </button>
+  ) : (
+    <p className="truncate font-medium">{run.task}</p>
+  );
 
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 py-3.5">
-      <p className="truncate font-medium" title={run.task}>
-        {run.task}
-      </p>
+    <li
+      className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 py-3.5 ${onOpen ? "items-start" : "items-baseline"}`}
+    >
+      {title}
       <span className="shrink-0 font-medium tabular-nums">{formatUsd(run.cost_usd)}</span>
-      <p className="col-span-2 truncate text-sm text-neutral-500">
+      <p className="col-span-2 truncate text-sm text-neutral-500" suppressHydrationWarning>
         {model}
         {extra > 0 ? ` +${extra}` : ""}
         <span aria-hidden="true"> · </span>
@@ -221,6 +238,123 @@ function TaskRow({ run }: { run: RecentRun }) {
         ) : null}
       </p>
     </li>
+  );
+}
+
+function PromptDialog({ run, onClose }: { run: RecentRun; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function copyPrompt() {
+    const text = run.summary ?? "";
+    const ok = await writeClipboard(text);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+      <button
+        type="button"
+        aria-label="Close prompt"
+        className="absolute inset-0 bg-black/30"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prompt-dialog-title"
+        className="relative max-h-[min(32rem,80dvh)] w-full max-w-xl overflow-y-auto rounded-3xl bg-white px-5 py-5 shadow-xl sm:px-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h3 id="prompt-dialog-title" className="text-base font-medium">
+            Full prompt
+          </h3>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-sm text-neutral-700 hover:bg-neutral-100"
+              onClick={() => void copyPrompt()}
+            >
+              {copied ? <CheckIcon /> : <CopyIcon />}
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <button
+              type="button"
+              aria-label="Close"
+              className="grid h-8 w-8 place-items-center rounded-full hover:bg-neutral-100"
+              onClick={onClose}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+        </div>
+        <p className="mt-4 text-[15px] leading-7 whitespace-pre-wrap text-neutral-800">{run.summary}</p>
+      </div>
+    </div>
+  );
+}
+
+async function writeClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.left = "0";
+      area.style.top = "0";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function CopyIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
   );
 }
 
