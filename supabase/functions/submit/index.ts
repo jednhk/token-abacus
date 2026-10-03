@@ -72,6 +72,12 @@ function parseRun(body: Record<string, unknown>, source: "mcp" | "report", insta
       install_hash: installHash,
       started_at: str(body.started_at, 40),
       ended_at: str(body.ended_at, 40),
+      // Tags for matching (record_run validates them): the agent's own judgement for MCP runs,
+      // the summarizer's for imports.
+      work_kind: str(body.work_kind, 20),
+      size: str(body.size, 10),
+      stack: Array.isArray(body.stack) ? (body.stack as unknown[]).slice(0, 8) : undefined,
+      tagged_by: source === "mcp" ? "agent" : "llm",
       models,
     } as Record<string, unknown>,
   };

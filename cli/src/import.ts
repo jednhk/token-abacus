@@ -40,6 +40,9 @@ interface Candidate {
   ended_at: number;
   models: ModelUsage[];
   task?: string;
+  size?: "small" | "medium" | "large";
+  work_kind?: string;
+  stack?: string[];
 }
 
 function projectsRoot(): string {
@@ -134,7 +137,11 @@ function describe(batch: Candidate[]): void {
     "If the request is mostly pasted text (another tool's output, an error log, a document), describe what the developer wanted done with it — e.g. \"Verify a calculator app's recorded token cost against session logs\" — not the pasted content itself.",
     "Never include secrets, file paths, URLs, emails, company or personal names.",
     "Use null when the request is not a task (a greeting, thanks, a yes/no reply with no context, a question unrelated to software).",
-    "Reply with only a JSON array: [{\"id\": 0, \"task\": \"…\" | null}, …]",
+    "Also tag each task:",
+    "- size (amount of work, not topic): \"small\" = one focused change, script, or single-page/single-file app, a few files, usually under an hour; \"medium\" = a multi-file feature or a small full-stack app (frontend + backend + database); \"large\" = multiple services or apps, infrastructure-as-code or cloud deployment, mobile + backend, or many features, several hours.",
+    "- work_kind: one of new_app, feature, bugfix, refactor, infra, docs, data, test, research, other.",
+    "- stack: main technologies, lowercase, most important first, at most 8 (empty array if unknown).",
+    "Reply with only a JSON array: [{\"id\": 0, \"task\": \"…\" | null, \"size\": \"small\", \"work_kind\": \"feature\", \"stack\": [\"…\"]}, …]",
     "",
     JSON.stringify(items),
   ].join("\n");
@@ -142,8 +149,17 @@ function describe(batch: Candidate[]): void {
     input: instruction, cwd: summarizeDir(), encoding: "utf8", timeout: 180_000, maxBuffer: 10_000_000,
   });
   const json = output.slice(output.indexOf("["), output.lastIndexOf("]") + 1);
-  for (const r of JSON.parse(json) as { id: number; task: string | null }[]) {
-    if (batch[r.id] && typeof r.task === "string" && r.task.trim()) batch[r.id].task = scrub(r.task.trim());
+  const kinds = ["new_app", "feature", "bugfix", "refactor", "infra", "docs", "data", "test", "research", "other"];
+  type Row = { id: number; task: string | null; size?: string; work_kind?: string; stack?: unknown };
+  for (const r of JSON.parse(json) as Row[]) {
+    const c = batch[r.id];
+    if (!c || typeof r.task !== "string" || !r.task.trim()) continue;
+    c.task = scrub(r.task.trim());
+    if (r.size === "small" || r.size === "medium" || r.size === "large") c.size = r.size;
+    if (r.work_kind && kinds.includes(r.work_kind)) c.work_kind = r.work_kind;
+    if (Array.isArray(r.stack)) {
+      c.stack = [...new Set(r.stack.filter((s): s is string => typeof s === "string").map((s) => s.trim().toLowerCase()).filter(Boolean))].slice(0, 8);
+    }
   }
 }
 
@@ -155,6 +171,9 @@ function payload(c: Candidate): SubmitPayload & { source: "report" } {
     harness: "claude-code",
     client_version: `token-abacus-import/${VERSION}`,
     outcome: "unknown",
+    ...(c.size ? { size: c.size } : {}),
+    ...(c.work_kind ? { work_kind: c.work_kind as SubmitPayload["work_kind"] } : {}),
+    ...(c.stack?.length ? { stack: c.stack } : {}),
     started_at: new Date(c.started_at).toISOString(),
     ended_at: new Date(c.ended_at).toISOString(),
     token_source: "transcript",
@@ -187,7 +206,7 @@ export async function runImport(options: ImportOptions = {}): Promise<void> {
 
   const previewPath = join(homeDir(), "import-preview.json");
   writeFileSync(previewPath, JSON.stringify(payloads.map((p) => ({
-    task: p.task, started_at: p.started_at,
+    task: p.task, size: p.size, work_kind: p.work_kind, stack: p.stack, started_at: p.started_at,
     models: p.models.map((m) => ({ model: m.model, total_tokens: total([m]), requests: m.requests?.length })),
   })), null, 2));
 

@@ -79,7 +79,10 @@ function textOf(result: any): string {
 }
 
 async function callEstimate(session: Session, task: string): Promise<string> {
-  const result: any = await session.client.callTool({ name: "estimate_task", arguments: { task } });
+  const result: any = await session.client.callTool({
+    name: "estimate_task",
+    arguments: { task, size: "small", work_kind: "feature", stack: ["node", "express"] },
+  });
   return result.structuredContent.run_id;
 }
 
@@ -134,6 +137,9 @@ test("estimate → work → submit uploads exact tokens from the transcript", as
   assert.equal(payload.client_version, "9.9.9");
   assert.equal(payload.outcome, "success");
   assert.equal(payload.token_source, "transcript");
+  assert.equal(payload.size, "small");                          // tags from estimate_task reach the upload
+  assert.equal(payload.work_kind, "feature");
+  assert.deepEqual(payload.stack, ["node", "express"]);
   assert.deepEqual(payload.models, [{
     model: "claude-sonnet-5-5", input_tokens: 150, output_tokens: 3000, cache_read_tokens: 110000, cache_write_tokens: 3000,
     cache_write_1h_tokens: 3000, requests: [[100, 2000, 50000, 3000, 3000, 0], [50, 1000, 60000, 0, 0, 0]],
@@ -183,7 +189,10 @@ test("API down: estimate degrades quickly, submit is queued and retried on next 
   const env = setup();
   const down = await startSession({ ...env, api: "http://127.0.0.1:9" });   // nothing listens on port 9
   const started = Date.now();
-  const result = await down.client.callTool({ name: "estimate_task", arguments: { task: "Add dark mode toggle to the navbar" } });
+  const result = await down.client.callTool({
+    name: "estimate_task",
+    arguments: { task: "Add dark mode toggle to the navbar", size: "small", work_kind: "feature", stack: ["react"] },
+  });
   assert.ok(Date.now() - started < 4000);
   assert.match(textOf(result), /^No estimate available yet/);
   const runId = (result as any).structuredContent.run_id;

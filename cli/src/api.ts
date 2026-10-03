@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { homeDir, loadConfig, log } from "./config.js";
 
 const DEFAULT_API = "https://fgkiecqobecqwwqixrem.supabase.co/functions/v1";
-const ESTIMATE_TIMEOUT_MS = 3_000;
+const ESTIMATE_TIMEOUT_MS = 20_000;   // the server reranks candidates with Claude (a few seconds)
 const SUBMIT_TIMEOUT_MS = 5_000;
 
 export interface ModelUsage {
@@ -19,10 +19,17 @@ export interface ModelUsage {
   requests?: number[][];
 }
 
+export type Size = "small" | "medium" | "large";
+export const KINDS = ["new_app", "feature", "bugfix", "refactor", "infra", "docs", "data", "test", "research", "other"] as const;
+export type WorkKind = typeof KINDS[number];
+
 export interface EstimateRequest {
   prompt: string;
   model?: string;
   harness: string;
+  size?: Size;
+  work_kind?: WorkKind;
+  stack?: string[];
 }
 
 export interface EstimateResponse {
@@ -55,6 +62,9 @@ export interface SubmitPayload {
   harness: string;
   client_version?: string;
   outcome: "success" | "partial" | "failed" | "abandoned" | "unknown";
+  size?: Size;
+  work_kind?: WorkKind;
+  stack?: string[];
   started_at: string;
   ended_at: string;
   token_source: "transcript" | "none";

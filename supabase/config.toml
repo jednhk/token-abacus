@@ -427,3 +427,6 @@ verify_jwt = false
 
 [functions.sync-pricing]
 verify_jwt = false
+
+[functions.tag-tasks]
+verify_jwt = false

@@ -29,7 +29,7 @@ await client.connect(transport);
 
 const estimate: any = await client.callTool({
   name: "estimate_task",
-  arguments: { task: "Fix a Django bug where a DecimalField lookup crashes on SQLite" },
+  arguments: { task: "Fix a Django bug where a DecimalField lookup crashes on SQLite", size: "small", work_kind: "bugfix", stack: ["python", "django", "sqlite"] },
 });
 console.log("estimate_task →", estimate.content[0].text);
 const runId = estimate.structuredContent.run_id;

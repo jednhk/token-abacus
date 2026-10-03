@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { estimate, type EstimateResponse } from "../api.js";
+import { estimate, KINDS, type EstimateResponse } from "../api.js";
 import { currentModel, detectHarness, findLog } from "../harness/detect.js";
 import { finalizeRun, formatTokens, formatUsd, nextFloor, submitRun, totalTokens } from "../lifecycle.js";
 import { getRun, ownRuns, saveRun, type Run } from "../runs.js";
+
+const SIZE_GUIDE =
+  "Amount of work, not topic. small: one focused change, script, or single-page/single-file app; a few files; " +
+  "usually under an hour. medium: a multi-file feature, or a small full-stack app (frontend + backend + database). " +
+  "large: multiple services or apps, infrastructure-as-code or cloud deployment, mobile + backend, or many features; several hours.";
 
 const ESTIMATE_DESCRIPTION =
   "Get a cost and token-budget estimate for a coding task before starting it. Call this once at the " +
@@ -59,12 +64,16 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         task: z.string().min(10).max(300)
           .describe("One specific sentence: what will be built or changed, and the stack."),
+        size: z.enum(["small", "medium", "large"]).describe(SIZE_GUIDE),
+        work_kind: z.enum(KINDS).describe("new_app = building something from scratch."),
+        stack: z.array(z.string()).max(8)
+          .describe('Main technologies, lowercase, most important first, e.g. ["node", "express", "socket.io", "sqlite"].'),
         model: z.string().optional().describe("The model you are running as, if known."),
         cwd: z.string().optional()
           .describe("Absolute path of the project directory. Used locally only, never uploaded."),
       },
     },
-    async ({ task, model, cwd }) => {
+    async ({ task, size, work_kind, stack, model, cwd }) => {
       // A new task ends the previous one: give it its final count, bounded so it can't absorb this
       // task. If the agent never called submit_run, it goes up with outcome "unknown".
       const now = Date.now();
@@ -85,12 +94,15 @@ export function registerTools(server: McpServer): void {
         started_at: new Date(now).toISOString(),
         pid: process.pid,
         floor: nextFloor(),
+        size,
+        work_kind,
+        stack,
       };
       saveRun(run);
 
       // Budget for the model the agent is actually running (from its session log) unless it said.
       const ownModel = model ?? (await currentModel(harness, run.log_file)) ?? undefined;
-      const result = await estimate({ prompt: task, model: ownModel, harness });
+      const result = await estimate({ prompt: task, model: ownModel, harness, size, work_kind, stack });
       if (result?.recommendation) saveRun({ ...run, estimate_usd: result.recommendation.budget_usd });
       return text(describeEstimate(run.run_id, result), { run_id: run.run_id, estimate: result });
     },
@@ -104,12 +116,15 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         run_id: z.string().describe("The run_id returned by estimate_task."),
         outcome: z.enum(["success", "partial", "failed", "abandoned"]),
+        size: z.enum(["small", "medium", "large"]).optional()
+          .describe("Only if the task turned out a different size than you estimated."),
         summary: z.string().min(5).max(300)
           .describe("One sentence on what was actually done. No secrets, file contents, or personal names."),
       },
     },
-    async ({ run_id, outcome, summary }) => {
-      const run = getRun(run_id);
+    async ({ run_id, outcome, summary, size }) => {
+      const stored = getRun(run_id);
+      const run = stored && size ? { ...stored, size } : stored;
       if (!run) {
         return text(`Unknown run_id ${run_id} (already submitted or never estimated). Nothing recorded.`);
       }

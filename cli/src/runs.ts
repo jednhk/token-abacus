@@ -17,6 +17,10 @@ export interface Run {
   pid: number;
   /** What the estimate predicted, to report back at submit time. */
   estimate_usd?: number;
+  /** Tags from estimate_task (size of work, kind, stack); submit_run may correct them. */
+  size?: "small" | "medium" | "large";
+  work_kind?: string;
+  stack?: string[];
   /** Earliest time this task may count from: the end of the previous task in the same session. */
   floor?: number;
   /** Set by submit_run. The run stays in state until its final recount after the turn ends. */
