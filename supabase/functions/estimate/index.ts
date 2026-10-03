@@ -57,18 +57,28 @@ function candidates(rows: StatsRow[]): StatsRow[] {
   return solid.length > 0 ? solid : usable;
 }
 
-/** Cheapest model that usually succeeds; the user's own model if it has enough data. */
-function pick(rows: StatsRow[], requested?: string): StatsRow | null {
+/** Cheapest model that usually succeeds. */
+function pick(rows: StatsRow[]): StatsRow | null {
   if (rows.length === 0) return null;
-  if (requested) {
-    const own = rows.find((r) => r.model === requested);
-    if (own) return own;
-  }
   const reliable = rows.filter((r) => r.success_rate === null || r.success_rate >= MIN_SUCCESS_RATE);
   const pool = reliable.length > 0 ? reliable : rows;
   const priced = pool.filter((r) => r.p50_cost !== null);
   if (priced.length > 0) return priced.reduce((a, b) => (b.p50_cost! < a.p50_cost! ? b : a));
   return pool.reduce((a, b) => (b.n > a.n ? b : a));
+}
+
+/** Budget and ceiling for one model, from its similar tasks. */
+function plan(row: StatsRow) {
+  const budgetTokens = Math.round(row.p85_tokens! * HEADROOM);
+  const budgetUsd = row.p85_cost !== null ? row.p85_cost * HEADROOM : null;
+  return {
+    model: row.model,
+    budget_tokens: budgetTokens,
+    budget_usd: round2(budgetUsd),
+    // The ceiling is never below the budget, even when p95 sits close to p85.
+    ceiling_tokens: Math.max(Math.round(row.p95_tokens!), budgetTokens),
+    ceiling_usd: round2(row.p95_cost === null ? null : Math.max(row.p95_cost, budgetUsd ?? 0)),
+  };
 }
 
 function confidence(row: StatsRow): "high" | "medium" | "low" {
@@ -85,7 +95,8 @@ Deno.serve(async (req) => {
 
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   if (prompt.length < 3 || prompt.length > 2000) return error('"prompt" must be 3–2000 characters.', 400);
-  const requested = typeof body.model === "string" ? body.model : undefined;
+  // Logs may carry dated ids (claude-haiku-4-5-20251001); stored runs use undated ones.
+  const requested = typeof body.model === "string" ? body.model.trim().replace(/-\d{8}$/, "") : undefined;
 
   try {
     const vector = await embed(prompt);
@@ -99,9 +110,16 @@ Deno.serve(async (req) => {
     const cutoff = Math.max(THRESHOLD, best - CLUSTER_BAND);
     const rows = best >= THRESHOLD ? await stats(vector, cutoff) : [];
 
-    const chosen = pick(candidates(rows), requested);
-    const budgetTokens = chosen && Math.round(chosen.p85_tokens! * HEADROOM);
-    const budgetUsd = chosen && chosen.p85_cost !== null ? chosen.p85_cost * HEADROOM : null;
+    // The caller's own model gets its own budget when there's any data for it (an agent budgets
+    // for the model it is running); the cheapest reliable model is offered alongside if cheaper.
+    const own = requested
+      ? rows.find((r) => r.model === requested && r.n >= 1 && r.p85_tokens !== null) ?? null
+      : null;
+    const cheapest = pick(candidates(rows));
+    const chosen = own ?? cheapest;
+    const alternative = own && cheapest && cheapest.model !== own.model &&
+        cheapest.p50_cost !== null && own.p50_cost !== null && cheapest.p50_cost < own.p50_cost
+      ? cheapest : null;
 
     // One entry per distinct task (imports repeat a task across models), preferring the run on the
     // recommended model so the example matches the recommendation.
@@ -122,15 +140,16 @@ Deno.serve(async (req) => {
     }));
 
     return json({
-      recommendation: chosen && {
-        model: chosen.model,
-        budget_tokens: budgetTokens,
-        budget_usd: round2(budgetUsd),
-        // The ceiling is never below the budget, even when p95 sits close to p85.
-        ceiling_tokens: Math.max(Math.round(chosen.p95_tokens!), budgetTokens!),
-        ceiling_usd: round2(chosen.p95_cost === null ? null : Math.max(chosen.p95_cost, budgetUsd ?? 0)),
-      },
+      recommendation: chosen && plan(chosen),
       confidence: chosen ? confidence(chosen) : "none",
+      // true: the recommendation is for the model the caller asked about. false: no similar tasks
+      // on that model yet, so this is the cheapest reliable model instead.
+      ...(requested ? { for_requested_model: own !== null } : {}),
+      alternative: alternative && {
+        ...plan(alternative),
+        n: alternative.n,
+        success_rate: alternative.success_rate === null ? null : Math.round(alternative.success_rate * 100) / 100,
+      },
       models: rows.map((r) => ({
         model: r.model,
         n: r.n,

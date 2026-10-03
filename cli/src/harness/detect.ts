@@ -20,6 +20,12 @@ export async function findLog(harness: Harness, cwd: string): Promise<string | n
   return null;
 }
 
+/** The model the agent is running as, read from its session log; null if unknown. */
+export async function currentModel(harness: Harness, logFile: string | null): Promise<string | null> {
+  if (!logFile || harness !== "claude-code") return null;
+  return claude.currentModel(logFile);
+}
+
 /** Times the human sent a prompt in this session, ascending; empty when the log can't tell us. */
 export async function promptTimes(harness: Harness, logFile: string | null): Promise<number[]> {
   if (!logFile || harness !== "claude-code") return [];

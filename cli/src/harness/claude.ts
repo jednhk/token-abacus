@@ -116,12 +116,23 @@ export async function readUsage(files: string[], start: number, end: number): Pr
       seen.add(requestId);
       const model: string = entry.message.model ?? "unknown";
       if (model === "<synthetic>") continue;                             // client-generated, not billed
-      const totals = byModel.get(model) ??
-        { model, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 };
-      totals.input_tokens += usage.input_tokens ?? 0;
-      totals.output_tokens += usage.output_tokens ?? 0;
-      totals.cache_read_tokens += usage.cache_read_input_tokens ?? 0;
-      totals.cache_write_tokens += usage.cache_creation_input_tokens ?? 0;
+      const totals = byModel.get(model) ?? {
+        model, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0,
+        cache_write_1h_tokens: 0, requests: [],
+      };
+      const input = usage.input_tokens ?? 0;
+      const output = usage.output_tokens ?? 0;
+      const cacheRead = usage.cache_read_input_tokens ?? 0;
+      const cacheWrite = usage.cache_creation_input_tokens ?? 0;
+      // 1-hour cache writes bill at a higher rate than 5-minute ones; Claude Code uses 1-hour.
+      const cacheWrite1h = Math.min(usage.cache_creation?.ephemeral_1h_input_tokens ?? 0, cacheWrite);
+      totals.input_tokens += input;
+      totals.output_tokens += output;
+      totals.cache_read_tokens += cacheRead;
+      totals.cache_write_tokens += cacheWrite;
+      totals.cache_write_1h_tokens += cacheWrite1h;
+      // Per request, so long-context pricing tiers (decided per request) can be applied exactly.
+      totals.requests!.push([input, output, cacheRead, cacheWrite, cacheWrite1h]);
       byModel.set(model, totals);
     }
   }
@@ -152,6 +163,21 @@ export async function promptTimes(sessionFile: string): Promise<number[]> {
     if (typed && Number.isFinite(time)) times.push(time);
   }
   return times.sort((a, b) => a - b);
+}
+
+/** The model of the most recent billed request in this session, or null. */
+export async function currentModel(sessionFile: string): Promise<string | null> {
+  if (!existsSync(sessionFile)) return null;
+  let latest: string | null = null;
+  const lines = createInterface({ input: createReadStream(sessionFile), crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.includes('"usage"')) continue;
+    try {
+      const model = JSON.parse(line)?.message?.model;
+      if (typeof model === "string" && model !== "<synthetic>") latest = model;
+    } catch {}
+  }
+  return latest;
 }
 
 export function sessionId(sessionFile: string): string {

@@ -424,3 +424,6 @@ verify_jwt = false
 
 [functions.embed-backfill]
 verify_jwt = false
+
+[functions.sync-pricing]
+verify_jwt = false

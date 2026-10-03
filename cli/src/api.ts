@@ -11,7 +11,12 @@ export interface ModelUsage {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  /** All cache writes, 5-minute and 1-hour. */
   cache_write_tokens: number;
+  /** The part of cache_write_tokens written with a 1-hour lifetime (billed at a higher rate). */
+  cache_write_1h_tokens: number;
+  /** Per request: [input, output, cache_read, cache_write, cache_write_1h]. */
+  requests?: number[][];
 }
 
 export interface EstimateRequest {
@@ -34,6 +39,13 @@ export interface EstimateResponse {
     p50_tokens: number; p85_tokens: number; p50_usd: number; p85_usd: number;
   }[];
   similar_tasks: { title: string; model: string; total_tokens: number; cost_usd: number; similarity: number }[];
+  /** Present when a model was sent: false means no similar tasks on that model yet. */
+  for_requested_model?: boolean;
+  /** A cheaper reliable model than the one recommended, if any. */
+  alternative?: {
+    model: string; budget_tokens: number; budget_usd: number; ceiling_tokens: number; ceiling_usd: number;
+    n: number; success_rate: number | null;
+  } | null;
 }
 
 export interface SubmitPayload {

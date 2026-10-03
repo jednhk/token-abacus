@@ -8,6 +8,7 @@ import { error, json, rateLimited, readJson, sha256 } from "../_shared/http.ts";
 
 const OUTCOMES = ["success", "partial", "failed", "abandoned", "unknown"];
 const TOKEN_SOURCES = ["transcript", "report", "manual", "none"];
+const MAX_REQUESTS = 5000;   // per model per task; a long agent session is a few hundred
 const OUTLIER_FACTOR = 10;   // flag a task >10× or <0.1× the median of ≥5 similar tasks on its model
 
 function str(value: unknown, max: number): string | undefined {
@@ -38,12 +39,20 @@ Deno.serve(async (req) => {
     const entry = m as Record<string, unknown>;
     const model = str(entry?.model, 100);
     if (!model) return [];
+    // Per-request usage lets the database apply long-context pricing tiers exactly.
+    const requests = Array.isArray(entry.requests)
+      ? (entry.requests as unknown[]).slice(0, MAX_REQUESTS)
+          .filter((r): r is unknown[] => Array.isArray(r))
+          .map((r) => [0, 1, 2, 3, 4].map((i) => count(r[i])))
+      : undefined;
     return [{
       model,
       input_tokens: count(entry.input_tokens),
       output_tokens: count(entry.output_tokens),
       cache_read_tokens: count(entry.cache_read_tokens),
       cache_write_tokens: count(entry.cache_write_tokens),
+      cache_write_1h_tokens: count(entry.cache_write_1h_tokens),
+      ...(requests && requests.length > 0 ? { requests } : {}),
     }];
   });
 

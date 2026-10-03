@@ -15,6 +15,8 @@ export function usageLine(opts: {
   output?: number;
   cacheRead?: number;
   cacheWrite?: number;
+  /** Part of cacheWrite written with a 1-hour lifetime. */
+  cacheWrite1h?: number;
   cwd?: string;
 }): string {
   return JSON.stringify({
@@ -31,6 +33,10 @@ export function usageLine(opts: {
         output_tokens: opts.output ?? 0,
         cache_read_input_tokens: opts.cacheRead ?? 0,
         cache_creation_input_tokens: opts.cacheWrite ?? 0,
+        cache_creation: {
+          ephemeral_5m_input_tokens: (opts.cacheWrite ?? 0) - (opts.cacheWrite1h ?? 0),
+          ephemeral_1h_input_tokens: opts.cacheWrite1h ?? 0,
+        },
       },
     },
   });

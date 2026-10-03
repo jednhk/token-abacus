@@ -20,7 +20,7 @@ test("readUsage counts each requestId once, includes subagents, respects the tim
     usageLine({ requestId: "before", time: t(0), output: 999 }),                 // before start
     usageLine({ requestId: "r1", time: t(5), input: 10, output: 100, cacheRead: 1000 }),
     usageLine({ requestId: "r1", time: t(5), input: 10, output: 100, cacheRead: 1000 }), // repeat line
-    usageLine({ requestId: "r2", time: t(6), input: 20, output: 200, cacheWrite: 50 }),
+    usageLine({ requestId: "r2", time: t(6), input: 20, output: 200, cacheWrite: 50, cacheWrite1h: 30 }),
     usageLine({ requestId: "r3", time: t(7), model: "claude-haiku-4-5", output: 5 }),
     "not json",
     JSON.stringify({ type: "user", timestamp: t(6).toISOString(), message: { role: "user", content: "hi" } }),
@@ -35,8 +35,16 @@ test("readUsage counts each requestId once, includes subagents, respects the tim
   const usage = await readUsage(files, t(1).getTime(), t(20).getTime());
 
   assert.deepEqual(usage, [
-    { model: "claude-sonnet-5-5", input_tokens: 31, output_tokens: 340, cache_read_tokens: 1000, cache_write_tokens: 50 },
-    { model: "claude-haiku-4-5", input_tokens: 0, output_tokens: 5, cache_read_tokens: 0, cache_write_tokens: 0 },
+    {
+      model: "claude-sonnet-5-5", input_tokens: 31, output_tokens: 340, cache_read_tokens: 1000,
+      cache_write_tokens: 50, cache_write_1h_tokens: 30,
+      // per request: [input, output, cache_read, cache_write, cache_write_1h]; the repeat line is gone
+      requests: [[10, 100, 1000, 0, 0], [20, 200, 0, 50, 30], [1, 40, 0, 0, 0]],
+    },
+    {
+      model: "claude-haiku-4-5", input_tokens: 0, output_tokens: 5, cache_read_tokens: 0,
+      cache_write_tokens: 0, cache_write_1h_tokens: 0, requests: [[0, 5, 0, 0, 0]],
+    },
   ]);
 });
 

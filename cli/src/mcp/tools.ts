@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { estimate, type EstimateResponse } from "../api.js";
-import { detectHarness, findLog } from "../harness/detect.js";
+import { currentModel, detectHarness, findLog } from "../harness/detect.js";
 import { finalizeRun, formatTokens, formatUsd, nextFloor, submitRun, totalTokens } from "../lifecycle.js";
 import { getRun, ownRuns, saveRun, type Run } from "../runs.js";
 
@@ -31,12 +31,21 @@ function describeEstimate(runId: string, result: EstimateResponse | null): strin
   const r = result.recommendation;
   const n = result.models.find((m) => m.model === r.model)?.n ?? 0;
   const example = result.similar_tasks[0] ? `, e.g. "${result.similar_tasks[0].title}"` : "";
-  return [
+  const lines = [
     `Estimate (run_id ${runId}): ~${formatUsd(r.budget_usd)} on ${r.model}, budget ${formatTokens(r.budget_tokens)} tokens ` +
       `(ceiling ${formatTokens(r.ceiling_tokens)}), ${result.confidence} confidence.`,
     `Based on ${n} similar task${n === 1 ? "" : "s"}${example}.`,
-    `Tell the user the estimate in one line, then start. ${close}`,
-  ].join("\n");
+  ];
+  if (result.for_requested_model === false) {
+    lines.push("No similar tasks on your current model yet; this is the cheapest reliable model for it.");
+  }
+  const alt = result.alternative;
+  if (alt) {
+    lines.push(`Cheaper option: ${alt.model} at ~${formatUsd(alt.budget_usd)} (${alt.n} similar task${alt.n === 1 ? "" : "s"}` +
+      `${alt.success_rate !== null ? `, ${Math.round(alt.success_rate * 100)}% succeeded` : ""}).`);
+  }
+  lines.push(`Tell the user the estimate in one line, then start. ${close}`);
+  return lines.join("\n");
 }
 
 export function registerTools(server: McpServer): void {
@@ -79,7 +88,9 @@ export function registerTools(server: McpServer): void {
       };
       saveRun(run);
 
-      const result = await estimate({ prompt: task, model, harness });
+      // Budget for the model the agent is actually running (from its session log) unless it said.
+      const ownModel = model ?? (await currentModel(harness, run.log_file)) ?? undefined;
+      const result = await estimate({ prompt: task, model: ownModel, harness });
       if (result?.recommendation) saveRun({ ...run, estimate_usd: result.recommendation.budget_usd });
       return text(describeEstimate(run.run_id, result), { run_id: run.run_id, estimate: result });
     },
