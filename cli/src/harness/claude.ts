@@ -129,6 +129,31 @@ export async function readUsage(files: string[], start: number, end: number): Pr
   return [...byModel.values()].sort((a, b) => b.output_tokens - a.output_tokens);
 }
 
+/**
+ * When the human typed each prompt in this session (epoch ms, ascending). Tool results and
+ * injected meta lines are also written as `type: "user"`, so only text the person typed counts.
+ * Task windows run from the prompt that started a task to the next prompt.
+ */
+export async function promptTimes(sessionFile: string): Promise<number[]> {
+  const times: number[] = [];
+  if (!existsSync(sessionFile)) return times;
+  const lines = createInterface({ input: createReadStream(sessionFile), crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.includes('"user"')) continue;
+    let entry;
+    try { entry = JSON.parse(line); } catch { continue; }
+    if (entry?.type !== "user" || entry.isMeta || entry.isSidechain) continue;
+    const content = entry.message?.content;
+    const typed = typeof content === "string" ||
+      (Array.isArray(content) &&
+        content.some((b: { type?: string }) => b?.type === "text") &&
+        !content.some((b: { type?: string }) => b?.type === "tool_result"));
+    const time = Date.parse(entry.timestamp);
+    if (typed && Number.isFinite(time)) times.push(time);
+  }
+  return times.sort((a, b) => a - b);
+}
+
 export function sessionId(sessionFile: string): string {
   return basename(sessionFile, ".jsonl");
 }

@@ -20,6 +20,12 @@ export async function findLog(harness: Harness, cwd: string): Promise<string | n
   return null;
 }
 
+/** Times the human sent a prompt in this session, ascending; empty when the log can't tell us. */
+export async function promptTimes(harness: Harness, logFile: string | null): Promise<number[]> {
+  if (!logFile || harness !== "claude-code") return [];
+  return claude.promptTimes(logFile);
+}
+
 /** Exact usage between start and end, or null when this harness has no readable log. */
 export async function usageBetween(harness: Harness, logFile: string | null, start: number, end: number): Promise<ModelUsage[] | null> {
   if (!logFile) return null;

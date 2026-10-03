@@ -1,11 +1,11 @@
 import { statSync } from "node:fs";
 import { submit, type ModelUsage, type SubmitPayload, type SubmitResponse } from "./api.js";
 import { loadConfig, log } from "./config.js";
-import { findLog, usageBetween } from "./harness/detect.js";
-import { removeRun, type Run } from "./runs.js";
+import { findLog, promptTimes, usageBetween } from "./harness/detect.js";
+import { getRun, removeRun, saveRun, type Run } from "./runs.js";
 import { scrub } from "./scrub.js";
 
-export type Outcome = SubmitPayload["outcome"];
+export type Outcome = NonNullable<Run["outcome"]>;
 
 export interface CloseResult {
   usage: ModelUsage[] | null;
@@ -15,48 +15,93 @@ export interface CloseResult {
   response: SubmitResponse | null;
 }
 
+// A task's cost covers the whole turn, not just the stretch between the two tool calls:
+//   start = the prompt that started it (or the end of the previous task in this session)
+//   end   = the next prompt (or the next task's estimate, or when we measure)
+// The request that calls submit_run and the agent's closing reply are written to the log only
+// after submit_run returns, so submit uploads a provisional count and the run is measured again
+// once the turn is over. Both uploads use the same run_id; the second replaces the first.
+
+const SETTLE_MS = Number(process.env.TOKEN_ABACUS_SETTLE_MS ?? 45_000);
+
+/** End of the last task measured in this process; the next task can't count tokens before it. */
+let lastBoundary = 0;
+
+export function nextFloor(): number {
+  return lastBoundary;
+}
+
+/** submit_run: record the outcome, upload what the log shows now, and schedule the final recount. */
+export async function submitRun(run: Run, outcome: Outcome, summary: string): Promise<CloseResult> {
+  const submitted: Run = { ...run, outcome, summary, ended_at: new Date().toISOString() };
+  saveRun(submitted);
+  const result = await measureAndUpload(submitted, { owned: true, end: Date.now() });
+  setTimeout(() => {
+    const current = getRun(run.run_id);
+    if (current) void finalizeRun(current, { owned: true }).catch((e) => log(`final recount failed: ${e}`));
+  }, SETTLE_MS).unref();
+  return result;
+}
+
 /**
- * Finish a run: read its exact token usage from the session log, upload it, forget it.
- * `owned` = this process started the run, so the session is still live and "now" is the end.
+ * Final measurement: upload the whole turn's usage and forget the run.
+ * `owned` = this process started the run, so the session is live and "now" bounds the window.
  * Otherwise the run was orphaned by a dead process and the log's last write marks the end.
+ * `upperBound` = when the next task began (its estimate), so this task can't absorb it.
  */
-export async function closeRun(
+export async function finalizeRun(
   run: Run,
-  outcome: Outcome,
-  summary: string,
-  { owned, timeoutMs }: { owned: boolean; timeoutMs?: number },
+  { owned, upperBound, timeoutMs }: { owned: boolean; upperBound?: number; timeoutMs?: number },
+): Promise<CloseResult> {
+  const end = owned ? Date.now() : lastWrite(run.log_file) ?? Date.now();
+  const result = await measureAndUpload(run, { owned, end, upperBound, timeoutMs });
+  removeRun(run.run_id);                     // a failed upload is already queued in the outbox
+  return result;
+}
+
+async function measureAndUpload(
+  run: Run,
+  { owned, end, upperBound, timeoutMs }: { owned: boolean; end: number; upperBound?: number; timeoutMs?: number },
 ): Promise<CloseResult> {
   const logFile = owned ? (await findLog(run.harness, run.cwd)) ?? run.log_file : run.log_file;
-  const end = owned ? Date.now() : lastWrite(logFile) ?? Date.now();
-  const start = Date.parse(run.started_at);
 
   let usage: ModelUsage[] | null = null;
   try {
-    usage = await usageBetween(run.harness, logFile, start, end);
+    const window = await taskWindow(run, logFile, end, upperBound);
+    if (owned) lastBoundary = Math.max(lastBoundary, window.end);
+    usage = await usageBetween(run.harness, logFile, window.start, window.end);
   } catch (error) {
     log(`reading usage for ${run.run_id} failed: ${error}`);
   }
 
-  if (!loadConfig().contribute) {
-    removeRun(run.run_id);
-    return { usage, contributed: false, response: null };
-  }
+  if (!loadConfig().contribute) return { usage, contributed: false, response: null };
 
   const payload: SubmitPayload = {
     run_id: run.run_id,
     task: scrub(run.task),
-    summary: scrub(summary),
+    summary: scrub(run.summary ?? run.task),
     harness: run.harness,
     client_version: run.client_version,
-    outcome,
+    outcome: run.outcome ?? "unknown",
     started_at: run.started_at,
-    ended_at: new Date(end).toISOString(),
+    ended_at: run.ended_at ?? new Date(end).toISOString(),
     token_source: usage && usage.length ? "transcript" : "none",
     models: usage ?? [],
   };
   const response = await submit(payload, timeoutMs);
-  removeRun(run.run_id);                     // a failed upload is already queued in the outbox
   return { usage, contributed: true, response };
+}
+
+async function taskWindow(run: Run, logFile: string | null, end: number, upperBound?: number) {
+  const started = Date.parse(run.started_at);
+  const ended = run.ended_at ? Date.parse(run.ended_at) : end;
+  const prompts = await promptTimes(run.harness, logFile);
+  const startPrompt = prompts.filter((t) => t <= started).at(-1);
+  const nextPrompt = prompts.find((t) => t > ended);
+  return {
+    start: Math.max(startPrompt ?? started, run.floor ?? 0),
+    end: Math.min(end, nextPrompt ?? Infinity, upperBound ?? Infinity),
+  };
 }
 
 function lastWrite(file: string | null): number | null {

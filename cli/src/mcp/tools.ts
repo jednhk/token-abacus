@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { estimate, type EstimateResponse } from "../api.js";
 import { detectHarness, findLog } from "../harness/detect.js";
-import { closeRun, formatTokens, formatUsd, totalTokens } from "../lifecycle.js";
+import { finalizeRun, formatTokens, formatUsd, nextFloor, submitRun, totalTokens } from "../lifecycle.js";
 import { getRun, ownRuns, saveRun, type Run } from "../runs.js";
 
 const ESTIMATE_DESCRIPTION =
@@ -56,9 +56,11 @@ export function registerTools(server: McpServer): void {
       },
     },
     async ({ task, model, cwd }) => {
-      // An open run means the agent never called submit_run for the previous task: close it now.
-      for (const open of ownRuns()) {
-        await closeRun(open, "unknown", open.task, { owned: true });
+      // A new task ends the previous one: give it its final count, bounded so it can't absorb this
+      // task. If the agent never called submit_run, it goes up with outcome "unknown".
+      const now = Date.now();
+      for (const previous of ownRuns()) {
+        await finalizeRun(previous, { owned: true, upperBound: now });
       }
 
       const harness = detectHarness(client()?.name);
@@ -71,8 +73,9 @@ export function registerTools(server: McpServer): void {
         client_version: client()?.version,
         cwd: projectDir,
         log_file: await findLog(harness, projectDir),
-        started_at: new Date().toISOString(),
+        started_at: new Date(now).toISOString(),
         pid: process.pid,
+        floor: nextFloor(),
       };
       saveRun(run);
 
@@ -99,7 +102,10 @@ export function registerTools(server: McpServer): void {
       if (!run) {
         return text(`Unknown run_id ${run_id} (already submitted or never estimated). Nothing recorded.`);
       }
-      const result = await closeRun(run, outcome, summary, { owned: run.pid === process.pid });
+      // A run from a server process that has since exited can't be recounted later: finish it now.
+      const result = run.pid === process.pid
+        ? await submitRun(run, outcome, summary)
+        : await finalizeRun({ ...run, outcome, summary, ended_at: new Date().toISOString() }, { owned: false });
 
       const status = !result.contributed ? "Not uploaded (contribution is off)"
         : result.response ? "Recorded" : "Upload queued for retry";

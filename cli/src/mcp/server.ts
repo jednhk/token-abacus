@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { flushOutbox } from "../api.js";
 import { log, VERSION } from "../config.js";
-import { closeRun } from "../lifecycle.js";
+import { finalizeRun } from "../lifecycle.js";
 import { orphanedRuns, ownRuns } from "../runs.js";
 import { registerTools } from "./tools.js";
 
@@ -35,7 +35,7 @@ async function housekeeping(): Promise<void> {
     await flushOutbox();
     for (const run of orphanedRuns()) {
       log(`closing orphaned run ${run.run_id} from pid ${run.pid}`);
-      await closeRun(run, "unknown", run.task, { owned: false });
+      await finalizeRun(run, { owned: false });
     }
   } catch (error) {
     log(`housekeeping failed: ${error}`);
@@ -53,7 +53,7 @@ function installShutdown(): void {
     shuttingDown = true;
     log(`shutting down (${reason})`);
     const closing = Promise.all(
-      ownRuns().map((run) => closeRun(run, "unknown", run.task, { owned: true, timeoutMs: SHUTDOWN_BUDGET_MS })),
+      ownRuns().map((run) => finalizeRun(run, { owned: true, timeoutMs: SHUTDOWN_BUDGET_MS })),
     );
     await Promise.race([closing, new Promise((resolve) => setTimeout(resolve, SHUTDOWN_BUDGET_MS))]);
     process.exit(0);

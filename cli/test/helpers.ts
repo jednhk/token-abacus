@@ -36,6 +36,19 @@ export function usageLine(opts: {
   });
 }
 
+/** A prompt the person typed, in Claude Code's format. */
+export function promptLine(time: Date, text = "Build something"): string {
+  return JSON.stringify({ type: "user", cwd: "/tmp/project", timestamp: time.toISOString(), message: { role: "user", content: text } });
+}
+
+/** A tool result, which Claude Code also writes as type "user" — must not count as a prompt. */
+export function toolResultLine(time: Date): string {
+  return JSON.stringify({
+    type: "user", timestamp: time.toISOString(),
+    message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+  });
+}
+
 export function append(file: string, ...lines: string[]): void {
   mkdirSync(join(file, ".."), { recursive: true });
   appendFileSync(file, lines.map((l) => `${l}\n`).join(""));

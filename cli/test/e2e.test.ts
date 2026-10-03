@@ -6,7 +6,7 @@ import { after, before, test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { encodeCwd } from "../src/harness/claude.js";
-import { append, tempDir, usageLine } from "./helpers.js";
+import { append, promptLine, tempDir, toolResultLine, usageLine } from "./helpers.js";
 
 // Drives the built server (dist/cli.js) over real stdio, as Claude Code would, against a fake API.
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
@@ -64,6 +64,7 @@ async function startSession(env: { home: string; claude: string; project: string
       TOKEN_ABACUS_HOME: env.home,
       CLAUDE_CONFIG_DIR: env.claude,
       TOKEN_ABACUS_API: env.api ?? apiUrl,
+      TOKEN_ABACUS_SETTLE_MS: "300",
     },
     stderr: "ignore",
   });
@@ -197,6 +198,74 @@ test("API down: estimate degrades quickly, submit is queued and retried on next 
   const payload = await waitFor(() => submits.find((s) => s.run_id === runId));
   assert.equal(payload.models[0].output_tokens, 300);
   await up.client.close();
+});
+
+// Replays the first real Claude Code session (2026-10-03): the request before estimate_task, the
+// request that calls submit_run (written to the log only after submit returns) and the closing
+// reply all belong to the task; the next prompt's work does not.
+test("final recount covers the whole turn, including requests logged after submit", async () => {
+  const session = await startSession(setup());
+  const at = (msAgo: number) => new Date(Date.now() - msAgo);
+
+  append(session.transcript,
+    promptLine(at(3000), "Build a simple calculator web page"),
+    usageLine({ requestId: "before-estimate", time: at(2500), output: 300, cacheRead: 20000 }),
+  );
+  const runId = await callEstimate(session, "Build a simple calculator web app with vanilla HTML, CSS and JS");
+  append(session.transcript,
+    toolResultLine(new Date()),                                                // not a prompt
+    usageLine({ requestId: "work", time: new Date(), output: 3500, cacheRead: 50000, cacheWrite: 6000 }),
+  );
+
+  const callTime = new Date();
+  const submitted: any = await session.client.callTool({
+    name: "submit_run", arguments: { run_id: runId, outcome: "success", summary: "Built the calculator" },
+  });
+  assert.match(submitted.content[0].text, /^Recorded: /);
+  const provisional = submits.filter((s) => s.run_id === runId).at(-1);
+  assert.equal(provisional.models[0].output_tokens, 300 + 3500);   // submit's own request isn't on disk yet
+
+  append(session.transcript,
+    usageLine({ requestId: "calls-submit", time: callTime, output: 240, cacheRead: 55000 }),   // lands late
+    usageLine({ requestId: "closing-reply", time: new Date(), output: 480, cacheRead: 57000 }),
+    promptLine(new Date(Date.now() + 50), "Now explain how it works"),
+    usageLine({ requestId: "next-turn", time: new Date(Date.now() + 100), output: 9999 }),
+  );
+
+  const final = await waitFor(() => {
+    const all = submits.filter((s) => s.run_id === runId);
+    return all.length >= 2 ? all.at(-1) : undefined;
+  });
+  assert.deepEqual(final.models, [{
+    model: "claude-sonnet-5-5",
+    input_tokens: 0,
+    output_tokens: 300 + 3500 + 240 + 480,
+    cache_read_tokens: 20000 + 50000 + 55000 + 57000,
+    cache_write_tokens: 6000,
+  }]);
+  assert.equal(final.outcome, "success");
+  assert.equal(final.summary, "Built the calculator");
+  await session.client.close();
+});
+
+test("two tasks in one turn don't count each other's tokens", async () => {
+  const session = await startSession(setup());
+  append(session.transcript, promptLine(new Date(Date.now() - 1000), "Add login, then add a logout button"));
+
+  const first = await callEstimate(session, "Add a login page with email and password");
+  append(session.transcript, usageLine({ requestId: "a", time: new Date(), output: 1000 }));
+  await session.client.callTool({ name: "submit_run", arguments: { run_id: first, outcome: "success", summary: "Added login" } });
+  await new Promise((r) => setTimeout(r, 20));
+
+  const second = await callEstimate(session, "Add a logout button to the navbar");   // finalizes the first
+  append(session.transcript, usageLine({ requestId: "b", time: new Date(), output: 200 }));
+  await session.client.callTool({ name: "submit_run", arguments: { run_id: second, outcome: "success", summary: "Added logout" } });
+
+  const lastFor = (id: string) => submits.filter((s) => s.run_id === id).at(-1);
+  assert.equal(lastFor(first).models[0].output_tokens, 1000);
+  await waitFor(() => (submits.filter((s) => s.run_id === second).length >= 2 ? true : undefined));
+  assert.equal(lastFor(second).models[0].output_tokens, 200);
+  await session.client.close();
 });
 
 test("secrets in task and summary are scrubbed before upload", async () => {
