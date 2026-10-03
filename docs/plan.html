@@ -1,0 +1,623 @@
+<title>Token Abacus Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column (~72ch) with a sticky section index; tables and code scroll in place. */
+:root {
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --fg: #16212b;
+  --muted: #5a6875;
+  --line: #dde2e7;
+  --ink: #1d4e6b;          /* deep ledger blue */
+  --bead: #c7811f;         /* abacus-bead amber, used sparingly */
+  --bead-soft: #f3e4cc;
+  --ok: #2f7a4d;
+  --ok-soft: #dcefe3;
+  --code-bg: #eef1f4;
+  --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171c; --surface: #172028; --fg: #e3e9ee; --muted: #93a2ae; --line: #2a3640;
+    --ink: #7fb6d6; --bead: #e0a24a; --bead-soft: #3a2c17; --ok: #6cc28f; --ok-soft: #1c3326;
+    --code-bg: #1b252e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171c; --surface: #172028; --fg: #e3e9ee; --muted: #93a2ae; --line: #2a3640;
+  --ink: #7fb6d6; --bead: #e0a24a; --bead-soft: #3a2c17; --ok: #6cc28f; --ok-soft: #1c3326;
+  --code-bg: #1b252e; color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--font-body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px;
+        display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 820px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 24px 56px; } nav.toc { display: none; } }
+
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start;
+          display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+nav.toc .label { font: 500 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+nav.toc a { color: var(--muted); text-decoration: none; padding: 2px 0 2px 10px; border-left: 2px solid transparent; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--ink); border-left-color: var(--bead); outline: none; }
+
+main { min-width: 0; display: flex; flex-direction: column; gap: 44px; }
+header { display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.eyebrow { font: 500 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+.eyebrow .draft { color: var(--bead); }
+h1 { font: 700 clamp(34px, 6vw, 52px)/1.05 var(--font-display); letter-spacing: -.02em; margin: 0; color: var(--fg); text-wrap: balance; }
+.lede { font-size: 19px; line-height: 1.5; max-width: 62ch; margin: 0; color: var(--fg); }
+.lede strong { color: var(--ink); }
+
+section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+h2 { font: 600 24px/1.2 var(--font-display); margin: 0; letter-spacing: -.01em; text-wrap: balance; display: flex; align-items: baseline; gap: 12px; }
+h2 .n { font: 500 13px/1 var(--font-mono); color: var(--bead); }
+h3 { font: 600 15px/1.3 var(--font-body); margin: 8px 0 0; }
+p { margin: 0; max-width: 68ch; }
+ul, ol { margin: 0; padding-left: 22px; max-width: 68ch; display: flex; flex-direction: column; gap: 6px; }
+a { color: var(--ink); }
+code { font: 400 .88em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 0; background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+      font: 400 13px/1.55 var(--font-mono); color: var(--fg); }
+pre code { background: none; padding: 0; font-size: inherit; }
+.cmt { color: var(--muted); }
+strong { font-weight: 600; }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.box h3 { margin: 0; }
+.box p, .box ul { font-size: 15px; }
+
+.steps { list-style: none; padding: 0; counter-reset: s; gap: 10px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; }
+.steps li::before { content: counter(s); font: 500 13px/26px var(--font-mono); width: 26px; height: 26px; text-align: center;
+                    border-radius: 50%; background: var(--bead-soft); color: var(--bead); }
+
+.table { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: none; }
+th { font: 500 11.5px/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.chip { display: inline-block; font: 500 11.5px/1 var(--font-mono); padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.must { background: var(--ok-soft); color: var(--ok); }
+.chip.stretch { background: var(--code-bg); color: var(--muted); }
+.chip.yes { background: var(--ok-soft); color: var(--ok); }
+
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+figcaption { font-size: 13.5px; color: var(--muted); }
+.rail { overflow-x: auto; }
+.rail svg { display: block; width: 100%; min-width: 520px; height: auto; }
+
+.callout { border-left: 3px solid var(--bead); background: var(--surface); border-radius: 0 10px 10px 0; padding: 14px 18px; }
+.decisions { list-style: none; padding: 0; gap: 12px; }
+.decisions li { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.decisions li strong { display: block; margin-bottom: 2px; }
+dl { margin: 0; display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 10px 20px; max-width: 72ch; }
+dt { font-weight: 600; }
+dd { margin: 0; color: var(--muted); }
+@media (max-width: 520px) { dl { grid-template-columns: minmax(0, 1fr); gap: 2px 0; } dd { margin-bottom: 10px; } }
+</style>
+
+<style>
+nav.toc .label + a { margin-top: 0; }
+nav.toc .label.second { margin-top: 18px; }
+.part { display: flex; flex-direction: column; gap: 10px; padding-top: 32px; border-top: 1px solid var(--line); }
+.part .eyebrow { color: var(--bead); }
+.part h2.big { font: 700 clamp(28px, 4.6vw, 38px)/1.1 var(--font-display); letter-spacing: -.02em; }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.flow .box .tag { font: 500 11px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--bead); }
+</style>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Sections">
+    <span class="label">Plan</span>
+    <a href="#why">Why</a>
+    <a href="#demo">Demo</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#api">API</a>
+    <a href="#estimate">The estimate</a>
+    <a href="#quality">Data quality</a>
+    <a href="#db">Database changes</a>
+    <a href="#integration">Integrations</a>
+    <a href="#security">Security</a>
+    <a href="#build">Build order</a>
+    <a href="#decisions">Open decisions</a>
+    <span class="label second">MCP build guide</span>
+    <a href="#mcp">Overview</a>
+    <a href="#mcp-tools">Tools</a>
+    <a href="#mcp-instructions">Instructions</a>
+    <a href="#mcp-logs">Reading logs</a>
+    <a href="#mcp-state">State &amp; shutdown</a>
+    <a href="#mcp-init">init command</a>
+    <a href="#mcp-privacy">Privacy rules</a>
+    <a href="#mcp-build">Milestones</a>
+    <a href="#mcp-tests">Tests</a>
+  </nav>
+
+  <main>
+    <header>
+      <div class="eyebrow"><span>Build plan</span><span class="draft">v2 · 3 Oct 2026</span><span>Repo: token-abacus</span></div>
+      <h1>Token Abacus</h1>
+      <p class="lede">Before an agent starts a task, tell it <strong>which model to use and what budget to set</strong>, based on what similar tasks actually cost other people. After the task, record what it really cost, automatically.</p>
+    </header>
+
+    <section id="why">
+      <h2><span class="n">01</span>Why</h2>
+      <p>Nobody can predict what an agent task will cost. A solopreneur doesn't know whether "set up a reverse proxy" is a $0.40 or a $4 job. An agent running overnight has no realistic budget to work against, so it either stops too early or burns money.</p>
+      <p>Token Abacus is a shared database of real tasks: task, model, tokens, cost. Before a task, the agent asks it for a recommended model and budget. After the task, the real numbers go back in.</p>
+      <div class="two">
+        <div class="box">
+          <h3>Who it's for</h3>
+          <ul>
+            <li><strong>Solopreneurs and indie builders</strong> who want a cost number before they press go.</li>
+            <li><strong>Agents running unattended</strong> that need a budget ceiling grounded in data.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>How data gets in</h3>
+          <ul>
+            <li><strong>Automatically, every task (main path).</strong> The local MCP server estimates before each task and uploads the real token counts after it.</li>
+            <li><strong>Usage report (second path).</strong> Paste a prompt from the website into any coding tool and get a 30-day report; contributing that history is optional.</li>
+            <li><strong>Manual submissions (stretch).</strong> A web form and leaderboard.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="demo">
+      <h2><span class="n">02</span>Demo</h2>
+      <p>What the judges see, in order:</p>
+      <ol class="steps">
+        <li><span>On a fresh machine, run <code>npx token-abacus init</code>. It reports "Added to Claude Code and Cursor" and asks whether to contribute data.</span></li>
+        <li><span>In Claude Code, type <em>"Set up a Caddy reverse proxy for my app."</em> The agent first replies <em>"Similar tasks cost about $0.40 on Sonnet (budget 180k tokens, 31 similar tasks)"</em>, then starts working.</span></li>
+        <li><span>When it's done, the agent records the task. The dashboard shows the new row with exact token counts read from the session log, next to the estimate.</span></li>
+        <li><span>On the website, paste the report prompt, get a 30-day usage report, contribute, and watch the database grow.</span></li>
+      </ol>
+    </section>
+
+    <section id="architecture">
+      <h2><span class="n">03</span>Architecture</h2>
+<pre><code>User's machine                                       Supabase
+┌──────────────────────────────────────┐            ┌─────────────────────────────────────────┐
+│ Claude Code / Codex / Cursor          │            │ Edge Functions (Deno / TypeScript)      │
+│   │ stdio (MCP)                       │   HTTPS    │   estimate  embed (gte-small) → stats   │
+│   ▼                                   │ ─────────► │   submit    validate → tag → embed →    │
+│ token-abacus mcp (local, via npx)     │            │             cost → outlier check → upsert│
+│   tools: estimate_task, submit_run    │            │   report    batch of past sessions      │
+│   reads the session log for exact     │            │                                         │
+│   token counts; never trusts the agent│            │ Postgres + pgvector: runs, model_pricing│
+└──────────────────────────────────────┘            └─────────────────────────────────────────┘</code></pre>
+      <div class="two">
+        <div class="box">
+          <h3>Why a local MCP server</h3>
+          <p>At the end of a task, someone has to say how many tokens it used. The agent can't, because it doesn't see its own usage. A server running on the user's machine can read the coding tool's own session log and add it up exactly.</p>
+        </div>
+        <div class="box">
+          <h3>Why it's fast</h3>
+          <p>The prompt is embedded inside the Edge Function with Supabase's built-in <code>gte-small</code> model, so there's no external API call. One database query finds the nearest tasks and computes per-model stats. Target: under 300 ms.</p>
+        </div>
+      </div>
+      <h3>Repo layout</h3>
+<pre><code>supabase/migrations/    schema
+supabase/functions/     estimate/, submit/, report/
+cli/                    npm package token-abacus: mcp (local MCP server), init, report
+web/                    landing page, estimate box, report prompt, dashboard
+docs/                   PLAN.md, MCP.md</code></pre>
+    </section>
+
+    <section id="api">
+      <h2><span class="n">04</span>API</h2>
+      <p>Every endpoint is <code>POST https://fgkiecqobecqwwqixrem.supabase.co/functions/v1/&lt;name&gt;</code>. JWT verification is off; the header <code>x-abacus-install: &lt;install_id&gt;</code> is used for rate limiting.</p>
+      <h3><code>estimate</code></h3>
+<pre><code><span class="cmt">// request</span>
+{ "prompt": "Set up Caddy reverse proxy with TLS for a Next.js app", "model": "claude-sonnet-5-5", "harness": "claude-code" }
+
+<span class="cmt">// response</span>
+{
+  "recommendation": { "model": "claude-sonnet-5-5", "budget_tokens": 180000, "budget_usd": 0.40,
+                      "ceiling_tokens": 290000, "ceiling_usd": 0.65 },
+  "confidence": "high",                         <span class="cmt">// high | medium | low | none</span>
+  "models": [ { "model": "claude-sonnet-5-5", "n": 31, "success_rate": 0.9,
+                "p50_tokens": 120000, "p85_tokens": 156000, "p50_usd": 0.27, "p85_usd": 0.35 } ],
+  "similar_tasks": [ { "title": "Nginx reverse proxy with Let's Encrypt", "model": "claude-sonnet-5-5",
+                       "total_tokens": 140000, "cost_usd": 0.31, "similarity": 0.91 } ]
+}
+<span class="cmt">// no matches → confidence "none", recommendation null</span></code></pre>
+      <h3><code>submit</code></h3>
+<pre><code><span class="cmt">// request, sent by the local MCP server — tokens come from the session log, never the agent</span>
+{ "run_id": "6f1c…", "task": "Set up Caddy reverse proxy with TLS for a Next.js app",
+  "summary": "Configured Caddy reverse proxy with automatic TLS",
+  "harness": "claude-code", "client_version": "2.1.0", "outcome": "success",
+  "started_at": "2026-10-04T10:00:00Z", "ended_at": "2026-10-04T10:12:30Z",
+  "token_source": "transcript",                 <span class="cmt">// transcript | none</span>
+  "models": [ { "model": "claude-sonnet-5-5", "input_tokens": 12000, "output_tokens": 9000,
+                "cache_read_tokens": 150000, "cache_write_tokens": 11000 } ] }
+
+<span class="cmt">// response — upsert by run_id, so retries are safe</span>
+{ "id": "uuid", "cost_usd": 0.37, "status": "recorded", "flagged": false }
+<span class="cmt">// token_source "none" → status "pending", not used in estimates until tokens are filled in</span></code></pre>
+      <h3><code>report</code></h3>
+<pre><code><span class="cmt">// request, built by the report script from local logs</span>
+{ "window_days": 30, "upload": true,
+  "sessions": [ { "session_id": "…", "harness": "claude-code", "prompts": ["…redacted…"],
+                  "models": [ … same shape as submit … ],
+                  "started_at": "…", "ended_at": "…", "commits": ["feat: add booking form"] } ] }
+
+<span class="cmt">// response</span>
+{ "totals": { "sessions": 41, "tokens": 0, "usd": 0 },
+  "by_model": [], "by_day": [], "by_harness": [], "top_shipped": [] }</code></pre>
+    </section>
+
+    <section id="estimate">
+      <h2><span class="n">05</span>How the estimate is made</h2>
+      <figure>
+        <div class="rail">
+          <svg viewBox="0 0 640 120" role="img" aria-label="Token scale from 0 to 300 thousand: median 120k, 85th percentile 156k, recommended budget 180k, ceiling 290k">
+            <!-- scale: x = 40 + tokens(k) * 1.8667 ; 0→40, 300k→600 -->
+            <line x1="40" y1="60" x2="600" y2="60" stroke="var(--line)" stroke-width="6" stroke-linecap="round"/>
+            <rect x="40" y="57" width="336" height="6" rx="3" fill="var(--ink)" opacity=".35"/>
+            <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="var(--muted)" text-anchor="middle">
+              <line x1="40" y1="70" x2="40" y2="76" stroke="var(--muted)"/><text x="40" y="92">0</text>
+              <line x1="226.7" y1="70" x2="226.7" y2="76" stroke="var(--muted)"/><text x="226.7" y="92">100k</text>
+              <line x1="413.3" y1="70" x2="413.3" y2="76" stroke="var(--muted)"/><text x="413.3" y="92">200k</text>
+              <line x1="600" y1="70" x2="600" y2="76" stroke="var(--muted)"/><text x="600" y="92">300k</text>
+            </g>
+            <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" text-anchor="middle">
+              <circle cx="264" cy="60" r="8" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5"/>
+              <text x="250" y="38" fill="var(--ink)">p50 120k</text>
+              <circle cx="331" cy="60" r="8" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5"/>
+              <text x="320" y="20" fill="var(--ink)">p85 156k</text>
+              <line x1="331" y1="24" x2="331" y2="50" stroke="var(--ink)" stroke-width="1"/>
+              <circle cx="376" cy="60" r="10" fill="var(--bead)"/>
+              <text x="404" y="38" fill="var(--bead)" font-weight="500">budget 180k</text>
+              <circle cx="581" cy="60" r="8" fill="var(--surface)" stroke="var(--muted)" stroke-width="2.5" stroke-dasharray="3 2"/>
+              <text x="566" y="38" fill="var(--muted)">ceiling 290k</text>
+            </g>
+          </svg>
+        </div>
+        <figcaption>Example from the API response above. The budget is the 85th percentile × 1.15; the ceiling is the 95th percentile.</figcaption>
+      </figure>
+      <div class="table">
+        <table>
+          <thead><tr><th>Step</th><th>Rule</th></tr></thead>
+          <tbody>
+            <tr><td>Find similar tasks</td><td>50 nearest by meaning; keep similarity ≥ 0.80; drop flagged and pending rows</td></tr>
+            <tr><td>Candidate models</td><td>At least 3 similar tasks</td></tr>
+            <tr><td>Recommended model</td><td>Cheapest median cost among models with ≥ 70% success, or the model the user is running</td></tr>
+            <tr><td>Budget</td><td>85th-percentile tokens × 1.15: enough for about 85% of similar tasks, plus headroom</td></tr>
+            <tr><td>Ceiling</td><td>95th percentile</td></tr>
+            <tr><td>Confidence</td><td>High: ≥ 10 tasks, high similarity, p85 &lt; 2 × p50. Low: few tasks or a wide spread</td></tr>
+            <tr><td>Too few matches</td><td>Retry with similarity ≥ 0.70 and mark confidence low</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Percentiles use successful tasks only. Budgets are shown in dollars first and tokens second, because cache reads dominate raw token counts and dollars are what users understand.</p>
+    </section>
+
+    <section id="quality">
+      <h2><span class="n">06</span>Data quality</h2>
+      <ul>
+        <li><strong>Task boundaries come from the agent.</strong> One <code>estimate_task</code> plus one <code>submit_run</code> is one task. That gives small, specific rows like "set up Caddy" or "fix login bug", not whole sessions.</li>
+        <li><strong>Token counts come from the session log</strong>, never from the agent. Count each <code>requestId</code> once and include subagent logs.</li>
+        <li><strong>Text</strong> is the agent's one-sentence task and summary, scrubbed locally for keys, emails and paths. On the server, Haiku tags <code>task_type</code> and <code>scope</code> and does a second redaction pass.</li>
+        <li><strong>Trust weights:</strong> automatic (MCP) 1.0, report 0.8, manual submission 0.3. Rows more than 10× or less than 0.1× the median of at least 5 similar tasks are flagged and excluded.</li>
+        <li><strong>Model names</strong> are normalized to <code>model_pricing</code> keys, and cost is always computed on the server.</li>
+      </ul>
+    </section>
+
+    <section id="db">
+      <h2><span class="n">07</span>Database changes (Shah)</h2>
+      <p>Migration 1 is applied. Migration 2 adds the run lifecycle:</p>
+      <ul>
+        <li><code>runs</code>: add <code>run_id uuid unique</code> (the upsert key), <code>task</code>, <code>summary</code>, <code>status</code> (recorded or pending), <code>token_source</code>, <code>started_at</code>, <code>ended_at</code>, <code>client_version</code>, <code>install_hash</code>, and <code>models jsonb</code> for the per-model breakdown.</li>
+        <li><code>estimate_stats</code> and <code>match_runs</code>: also exclude pending rows.</li>
+        <li>Change <code>source</code> values to <code>mcp</code>, <code>report</code>, <code>submission</code> and <code>seed</code>.</li>
+      </ul>
+    </section>
+
+    <section id="integration">
+      <h2><span class="n">08</span>Integration with everyone's agents</h2>
+      <div class="table">
+        <table>
+          <thead><tr><th>Layer</th><th>What it is</th><th>Works with</th><th>Automatic?</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Local MCP server</strong> (main)</td><td><code>npx token-abacus mcp</code>: <code>estimate_task</code>, <code>submit_run</code>, exact tokens from logs</td><td>Claude Code and Codex with exact tokens; Cursor and others get estimates, tokens pending</td><td><span class="chip yes">Yes</span></td></tr>
+            <tr><td><strong><code>token-abacus init</code></strong></td><td>Adds the server to every installed tool and asks for consent</td><td>Same</td><td>One command</td></tr>
+            <tr><td><strong>Report prompt</strong> (second path)</td><td>Paste into any coding tool; runs <code>npx token-abacus report</code> for a report and optional upload</td><td>Any tool with local logs</td><td>On demand</td></tr>
+            <tr><td><strong>Claude Code hook</strong> (stretch)</td><td>Forces an estimate on the first prompt if the agent skips it</td><td>Claude Code</td><td><span class="chip yes">Yes</span></td></tr>
+            <tr><td><strong>OpenTelemetry</strong> (later)</td><td>Native usage export from Claude Code and Codex</td><td>Claude Code, Codex</td><td><span class="chip yes">Yes</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="security">
+      <h2><span class="n">09</span>Security, privacy and cost</h2>
+      <ul>
+        <li>Row-level security is on and clients never touch tables. All reads and writes go through Edge Functions, and database functions can't be called by <code>anon</code> or <code>authenticated</code>.</li>
+        <li>Only the task sentence, summary, model and token numbers leave the user's machine. Never code, file names, paths or log lines.</li>
+        <li>Contributing is opt-in at <code>init</code>. Estimates work without it.</li>
+        <li>Rate limits per <code>install_id</code> and per IP.</li>
+      </ul>
+      <div class="two">
+        <div class="box">
+          <h3>Secrets</h3>
+          <p><code>SUPABASE_SERVICE_ROLE_KEY</code> for Edge Functions only (provided automatically). <code>ANTHROPIC_API_KEY</code> as an Edge Function secret, for tagging. Clients need no keys.</p>
+        </div>
+        <div class="box">
+          <h3>Budget</h3>
+          <p>Supabase Pro (about $25 a month) from the $100 credits, with the spend cap on. Haiku tagging costs a fraction of a cent per task and runs only on submit, never on estimate.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="build">
+      <h2><span class="n">10</span>Build order and owners</h2>
+      <div class="table">
+        <table>
+          <thead><tr><th>#</th><th>Milestone</th><th>Owner</th><th>Scope</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>Schema migration 1 and <code>model_pricing</code> seeded (schema done)</td><td>Shah</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">2</td><td>Seed data: parse our own Claude Code logs into tasks</td><td>Shah</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">3</td><td><code>estimate</code> deployed, real numbers for a test prompt</td><td>Shah</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">4</td><td>Local MCP server against a mock API (guide milestones 1–4)</td><td>MCP teammate</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">5</td><td>Migration 2 and <code>submit</code></td><td>Shah</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">6</td><td>MCP server on the real API, plus <code>init</code></td><td>MCP teammate</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">7</td><td>Website: landing page, estimate box, live dashboard of recent tasks</td><td>Web</td><td><span class="chip must">Must-have</span></td></tr>
+            <tr><td class="num">8</td><td>Report script, report prompt and <code>report</code> function</td><td>Report / Web</td><td><span class="chip stretch">Stretch</span></td></tr>
+            <tr><td class="num">9</td><td>Codex log reader and Claude Code hook</td><td>MCP teammate</td><td><span class="chip stretch">Stretch</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout"><strong>Cut line:</strong> ship 1 to 7. The report is the first stretch goal.</div>
+    </section>
+
+    <section id="decisions">
+      <h2><span class="n">11</span>Open decisions</h2>
+      <ul class="decisions">
+        <li><strong>Similarity threshold</strong>0.80 is a placeholder. <code>gte-small</code> scores run high, so check same-task and different-task pairs on the seed data before the demo.</li>
+        <li><strong>Will agents call the tools reliably?</strong>Test the server instructions on 10 real tasks in Claude Code and Codex. If they often skip <code>estimate_task</code>, add the Claude Code hook.</li>
+        <li><strong>Tools without readable logs</strong>Cursor tasks stay pending. Is that fine for v1, or do we accept agent-estimated tokens at low trust?</li>
+        <li><strong>Report data</strong>Report history has no clean task boundaries. Store it as sessions at low trust, or split it into tasks with an LLM?</li>
+      </ul>
+    </section>
+
+    <!-- ───────────────────────── MCP BUILD GUIDE ───────────────────────── -->
+
+    <div class="part" id="mcp">
+      <div class="eyebrow">Part 2 · For the MCP teammate · also in docs/MCP.md</div>
+      <h2 class="big">Local MCP server build guide</h2>
+      <p>The local MCP server is the main product. It runs on the user's machine (<code>npx token-abacus mcp</code>), gives the agent two tools, <strong>estimate before a task and submit after it</strong>, and reads the coding tool's own session log so token counts are exact and never come from the agent.</p>
+    </div>
+
+    <section>
+      <h2><span class="n">M1</span>One task, end to end</h2>
+<pre><code>User: "Set up a Caddy reverse proxy for my app"
+  │
+  ├─► agent calls estimate_task({ task: "Set up Caddy reverse proxy with TLS for a Next.js app" })
+  │     local server: create run (run_id, start time, session log) → save to state file
+  │                   POST /estimate → "~$0.40 on Sonnet · budget 180k tokens · 31 similar"
+  │
+  ├─► agent does the work (normal tool use)
+  │
+  └─► agent calls submit_run({ run_id, outcome: "success", summary: "Configured Caddy with auto TLS" })
+        local server: read session log from start → now, sum usage per model (exact)
+                      POST /submit { summary, model, tokens, duration, outcome } → remove from state</code></pre>
+      <h3>Safety nets, so data is collected even when the agent forgets</h3>
+      <div class="table">
+        <table>
+          <thead><tr><th>Situation</th><th>Behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Agent never calls <code>submit_run</code></td><td>The next <code>estimate_task</code> closes the open run first, with outcome <code>unknown</code></td></tr>
+            <tr><td>Session ends (server process exits)</td><td>The shutdown handler closes and uploads the open run</td></tr>
+            <tr><td>Process killed before upload</td><td>The run is still in the state file, so it's closed and uploaded on the next start</td></tr>
+            <tr><td>Upload fails (offline, server error)</td><td>The payload goes to the outbox and is retried on the next start or call</td></tr>
+            <tr><td>API slow or down during an estimate</td><td>3-second timeout; the tool returns "No estimate available" and the agent carries on</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Stack</h3>
+      <ul>
+        <li><strong>Node 20+ and TypeScript</strong>, published to npm as <code>token-abacus</code>. Check the name is free with <code>npm view token-abacus</code>.</li>
+        <li><strong><code>@modelcontextprotocol/sdk</code></strong> with the stdio transport, and <strong><code>zod</code></strong> for tool input schemas, at the version the SDK's peer dependency asks for.</li>
+        <li>Build with <code>tsup</code> or <code>tsc</code> to <code>dist/</code>, with <code>"bin": { "token-abacus": "dist/cli.js" }</code> and a <code>#!/usr/bin/env node</code> shebang.</li>
+        <li>Keep runtime dependencies to a minimum, because <code>npx</code> start-up time matters.</li>
+      </ul>
+<pre><code>cli/
+  src/cli.ts             subcommands: mcp | init | report (report later)
+  src/mcp/server.ts      McpServer, instructions, tool registration, shutdown handlers
+  src/mcp/tools.ts       estimate_task, submit_run handlers
+  src/runs.ts            run lifecycle + state file (~/.token-abacus/state.json)
+  src/api.ts             fetch wrapper: base URL, timeout, outbox retry
+  src/config.ts          ~/.token-abacus/config.json (install_id, contribute flag)
+  src/harness/detect.ts  which client launched us + where its logs live
+  src/harness/claude.ts  Claude Code transcript reader
+  src/harness/codex.ts   Codex rollout reader
+  src/init.ts            add the MCP server to each installed tool
+  test/fixtures/         small real (redacted) transcript files</code></pre>
+    </section>
+
+    <section id="mcp-tools">
+      <h2><span class="n">M2</span>Tools</h2>
+      <h3><code>estimate_task</code></h3>
+      <div class="table">
+        <table>
+          <tbody>
+            <tr><td><strong>Description</strong></td><td>"Get a cost and token-budget estimate for a coding task before starting it. Call this once at the start of each distinct task the user asks for. Describe the task in one specific sentence (what + stack), not the user's raw words. Skip it for questions and trivial one-step edits."</td></tr>
+            <tr><td><strong>Input</strong></td><td><code>task: string</code> (required, 10–300 chars) · <code>model?: string</code> (the model the agent is running as) · <code>cwd?: string</code> (absolute project path, used only locally to find the session log, never uploaded)</td></tr>
+            <tr><td><strong>Behavior</strong></td><td>1. If a run is open, close it as <code>unknown</code> and queue its upload. 2. Create a run: <code>run_id = crypto.randomUUID()</code>, <code>started_at = now</code>, harness and log location; save state. 3. <code>POST /estimate</code> with a 3-second timeout.</td></tr>
+            <tr><td><strong>Output</strong></td><td>Short text for the agent, plus <code>structuredContent</code> with the full API response and <code>run_id</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+<pre><code>Estimate (run_id 6f1c…): ~$0.40 on claude-sonnet-5-5, budget 180k tokens (ceiling 290k), high confidence.
+Based on 31 similar tasks, e.g. "Nginx reverse proxy with Let's Encrypt".
+Tell the user the estimate in one line, then start. Call submit_run with this run_id when done.</code></pre>
+      <h3><code>submit_run</code></h3>
+      <div class="table">
+        <table>
+          <tbody>
+            <tr><td><strong>Description</strong></td><td>"Record a finished task so future estimates improve. Call this when the task you estimated is complete (or abandoned). Token counts are read automatically; do not include them."</td></tr>
+            <tr><td><strong>Input</strong></td><td><code>run_id: string</code> · <code>outcome: "success" | "partial" | "failed" | "abandoned"</code> · <code>summary: string</code> (one sentence on what was done, with no secrets, file contents or personal names)</td></tr>
+            <tr><td><strong>Behavior</strong></td><td>1. Look up the run (an unknown id returns an error message, never a crash). 2. <code>ended_at = now</code>. 3. Read usage from the session log between start and end. 4. If contributing is off, drop it. 5. <code>POST /submit</code>. 6. Remove it from state.</td></tr>
+            <tr><td><strong>Output</strong></td><td><code>Recorded: 182k tokens, $0.37 on claude-sonnet-5-5 (estimate was $0.40).</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">Never put token counts in the input schema. The agent would guess them.</div>
+    </section>
+
+    <section id="mcp-instructions">
+      <h2><span class="n">M3</span>Server instructions</h2>
+      <p>MCP servers can send <code>instructions</code> when they start. Clients that support it, including Claude Code, add them to the agent's context. Repeat the essentials in the tool descriptions for clients that don't.</p>
+<pre><code>const server = new McpServer(
+  { name: "token-abacus", version },
+  { instructions: `Token Abacus estimates what coding tasks cost.
+- At the START of each distinct task the user asks for, call estimate_task with a one-sentence task description, and tell the user the estimate in one line.
+- When that task is DONE (or abandoned), call submit_run with the run_id and a one-sentence summary.
+- One task = one estimate_task + one submit_run. A new request from the user is a new task.
+- Skip both for questions, explanations, and trivial one-step edits.
+- Never send secrets, file contents, or personal names in task or summary.` }
+);</code></pre>
+      <div class="callout"><strong>stdio rule:</strong> never write to stdout except through the SDK, because it corrupts the protocol. Log to stderr or <code>~/.token-abacus/debug.log</code>.</div>
+    </section>
+
+    <section id="mcp-logs">
+      <h2><span class="n">M4</span>Reading token usage from session logs</h2>
+      <p><strong>Which client launched us:</strong> after initialization, <code>server.server.getClientVersion()</code> returns the client's name and version. Map it to <code>claude-code</code>, <code>codex</code> or <code>other</code>, and log the raw name the first time so we learn the real values.</p>
+      <h3>Claude Code (checked against real logs, Oct 2026)</h3>
+      <ul>
+        <li>Location: <code>~/.claude/projects/&lt;encoded cwd&gt;/&lt;sessionId&gt;.jsonl</code>, where the encoded cwd is the project path with every non-alphanumeric character replaced by <code>-</code>.</li>
+        <li><strong>Subagent usage is in separate files</strong> at <code>&lt;encoded cwd&gt;/&lt;sessionId&gt;/subagents/agent-*.jsonl</code>. Include them.</li>
+        <li>Which session: the newest <code>.jsonl</code> in that folder. If the folder isn't found, scan files modified in the last hour for lines whose <code>cwd</code> matches. Resolve again at submit time.</li>
+        <li><strong>One API response is written as several lines with the same <code>requestId</code> and identical usage.</strong> Count each <code>requestId</code> once. On a real sample, about a third of usage lines were repeats.</li>
+      </ul>
+<pre><code>async function claudeUsage(files: string[], start: number, end: number) {
+  const seen = new Set&lt;string&gt;();
+  const byModel = new Map&lt;string, Usage&gt;();
+  for (const file of files) {
+    for await (const line of readLines(file)) {
+      let e; try { e = JSON.parse(line); } catch { continue; }
+      const u = e?.message?.usage;
+      if (!u || !e.requestId || seen.has(e.requestId)) continue;
+      const t = Date.parse(e.timestamp);
+      if (t &lt; start || t &gt; end) continue;
+      seen.add(e.requestId);
+      const m = byModel.get(e.message.model) ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+      m.input += u.input_tokens ?? 0;
+      m.output += u.output_tokens ?? 0;
+      m.cacheRead += u.cache_read_input_tokens ?? 0;
+      m.cacheWrite += u.cache_creation_input_tokens ?? 0;
+      byModel.set(e.message.model, m);
+    }
+  }
+  return byModel;   // primary model = most output tokens; send all models
+}</code></pre>
+      <h3>Codex (verify against a real file first)</h3>
+      <ul>
+        <li>Location: <code>~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code>; pick the newest whose session <code>cwd</code> matches.</li>
+        <li>Expected: <code>token_count</code> events with <strong>cumulative</strong> totals, and <code>turn_context</code> entries with the model. Usage for a run is the cumulative total at the end minus the total at the start.</li>
+        <li>Get a real rollout file from a teammate who uses Codex and add it to the test fixtures before relying on this.</li>
+      </ul>
+      <h3>Other clients</h3>
+      <p>Cursor and others have no readable log yet. Submit with <code>token_source: "none"</code>; the server stores these as pending and leaves them out of estimates.</p>
+    </section>
+
+    <section id="mcp-state">
+      <h2><span class="n">M5</span>Local state and shutdown</h2>
+      <div class="table">
+        <table>
+          <thead><tr><th>File in ~/.token-abacus/</th><th>Contents</th></tr></thead>
+          <tbody>
+            <tr><td><code>config.json</code></td><td><code>install_id</code>, <code>contribute</code> flag, optional API override; written by <code>init</code></td></tr>
+            <tr><td><code>state.json</code></td><td>Open runs keyed by <code>run_id</code>: task, start time, harness, cwd, log file, pid</td></tr>
+            <tr><td><code>outbox.jsonl</code></td><td>Submit payloads that failed to upload</td></tr>
+            <tr><td><code>debug.log</code></td><td>Logs, capped at about 1 MB</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>Several sessions can run at once, one server process each. Key state by <code>run_id</code>, store the owning <code>pid</code>, write to a temp file then rename, and on start-up only auto-close runs whose <code>pid</code> is no longer alive.</li>
+        <li><strong>Shutdown:</strong> the client closes stdin or sends SIGTERM/SIGINT. Handle all three: close this process's open run and try the upload with a 2-second timeout. If it doesn't finish, the run stays in <code>state.json</code> and is uploaded on the next start.</li>
+        <li><strong>API:</strong> base URL defaults to the Supabase functions URL; override with <code>TOKEN_ABACUS_API</code>, and use <code>mock</code> for canned responses during development.</li>
+      </ul>
+    </section>
+
+    <section id="mcp-init">
+      <h2><span class="n">M6</span>The <code>init</code> command</h2>
+      <ol class="steps">
+        <li><span>Create <code>~/.token-abacus/config.json</code> with a new <code>install_id</code>.</span></li>
+        <li><span>Ask: "Contribute anonymized task summaries and token counts to improve estimates? [Y/n]" and show exactly what is sent.</span></li>
+        <li><span>Detect installed tools and add the server to each (configs below).</span></li>
+        <li><span>Print what was changed and how to undo it.</span></li>
+      </ol>
+<pre><code><span class="cmt"># Claude Code</span>
+claude mcp add --scope user token-abacus -- npx -y token-abacus@1 mcp
+
+<span class="cmt"># Codex — ~/.codex/config.toml</span>
+[mcp_servers.token-abacus]
+command = "npx"
+args = ["-y", "token-abacus@1", "mcp"]
+
+<span class="cmt"># Cursor — ~/.cursor/mcp.json</span>
+{ "mcpServers": { "token-abacus": { "command": "npx", "args": ["-y", "token-abacus@1", "mcp"] } } }</code></pre>
+    </section>
+
+    <section id="mcp-privacy">
+      <h2><span class="n">M7</span>Privacy rules (enforced in code)</h2>
+      <ul>
+        <li>The only uploaded text is <code>task</code> and <code>summary</code>. Before sending, a local scrubber removes API-key patterns (<code>sk-…</code>, <code>ghp_…</code>, <code>AKIA…</code>, JWTs), emails, URLs with query strings and absolute paths, and truncates each field to 300 characters.</li>
+        <li>Never upload <code>cwd</code>, file names, file contents or log lines.</li>
+        <li>With <code>contribute: false</code>, estimates still work and nothing is submitted.</li>
+      </ul>
+    </section>
+
+    <section id="mcp-build">
+      <h2><span class="n">M8</span>Milestones</h2>
+      <div class="table">
+        <table>
+          <thead><tr><th>#</th><th>Milestone</th><th>Done when</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>Scaffold, stdio server with both tools returning mock data</td><td>Both tools callable in MCP Inspector: <code>npx @modelcontextprotocol/inspector node dist/cli.js mcp</code></td></tr>
+            <tr><td class="num">2</td><td>Claude Code transcript reader with tests on fixture files</td><td>Totals match a hand check on one real session</td></tr>
+            <tr><td class="num">3</td><td>Run lifecycle and <code>state.json</code></td><td>Estimate then submit returns exact tokens for the work in between</td></tr>
+            <tr><td class="num">4</td><td>Safety nets: auto-close, shutdown handler, stale runs, outbox</td><td>Killing the process mid-task still produces an upload on the next start</td></tr>
+            <tr><td class="num">5</td><td>Real API with timeout</td><td>Works end to end against Supabase</td></tr>
+            <tr><td class="num">6</td><td>Real use in Claude Code</td><td>The agent calls both tools unprompted on 3 different tasks</td></tr>
+            <tr><td class="num">7</td><td><code>init</code> command</td><td>On a fresh machine, one command makes it work in Claude Code and Cursor</td></tr>
+            <tr><td class="num">8</td><td>Codex reader</td><td>Checked against a real rollout file</td></tr>
+            <tr><td class="num">9</td><td>Publish <code>token-abacus@1.0.0</code></td><td><code>npx -y token-abacus@1 mcp</code> works from a clean directory</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Until the real API is deployed, build against <code>TOKEN_ABACUS_API=mock</code>.</p>
+    </section>
+
+    <section id="mcp-tests">
+      <h2><span class="n">M9</span>Test checklist</h2>
+      <ul>
+        <li>API down: the tool returns quickly with "No estimate available".</li>
+        <li>Two Claude Code sessions in different projects at once: each run reads its own log.</li>
+        <li>Agent never calls <code>submit_run</code>: the next <code>estimate_task</code> uploads the previous run as <code>unknown</code>.</li>
+        <li><code>kill -9</code> on the server mid-run: the next start uploads it.</li>
+        <li>A summary containing <code>sk-ant-…</code> and an email: both are stripped before upload.</li>
+        <li><code>contribute: false</code>: no network call to <code>/submit</code>.</li>
+        <li>Nothing is printed to stdout outside the protocol.</li>
+      </ul>
+    </section>
+
+    <section id="glossary">
+      <h2><span class="n">—</span>Glossary</h2>
+      <dl>
+        <dt>Embedding, vector search</dt><dd>Turning text into numbers so "Caddy reverse proxy" and "Nginx reverse proxy" land close together. We look up the closest past tasks.</dd>
+        <dt>p50, p85, p95</dt><dd>The token count that 50%, 85% or 95% of similar tasks stayed under.</dd>
+        <dt>Edge Function</dt><dd>A small TypeScript server function hosted by Supabase.</dd>
+        <dt>MCP</dt><dd>The standard way agents (Claude, Codex, Cursor and others) call external tools. A local MCP server runs on the user's machine, started by their coding tool.</dd>
+      </dl>
+    </section>
+  </main>
+</div>
