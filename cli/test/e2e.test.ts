@@ -127,7 +127,7 @@ test("estimate → work → submit uploads exact tokens from the transcript", as
     name: "submit_run",
     arguments: { run_id: runId, outcome: "success", summary: "Configured Caddy reverse proxy with automatic TLS" },
   });
-  assert.match(textOf(result), /^Recorded: 116k tokens, \$0\.12 on claude-sonnet-5-5 \(estimate was \$0\.40\)\.$/);
+  assert.match(textOf(result), /^Recorded: 116k tokens, \$0\.12 so far on claude-sonnet-5-5 \(estimate was \$0\.40\)\. The final count/);
 
   const payload = submits.find((s) => s.run_id === runId);
   assert.equal(payload.harness, "claude-code");

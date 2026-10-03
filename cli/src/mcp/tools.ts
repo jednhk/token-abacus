@@ -114,9 +114,14 @@ export function registerTools(server: McpServer): void {
         const cost = result.response?.cost_usd;
         const costText = cost != null ? `, ${formatUsd(cost)}` : "";
         const vsEstimate = run.estimate_usd !== undefined ? ` (estimate was ${formatUsd(run.estimate_usd)})` : "";
-        detail = `${formatTokens(totalTokens(result.usage))} tokens${costText} on ${result.usage[0].model}${vsEstimate}`;
+        detail = `${formatTokens(totalTokens(result.usage))} tokens${costText} so far on ${result.usage[0].model}${vsEstimate}`;
       }
-      return text(`${status}: ${detail}.`, { run_id, usage: result.usage, response: result.response });
+      // This call, and the reply after it, aren't in the session log yet; the final recount adds them.
+      const note = run.pid === process.pid
+        ? " The final count, including this step and your reply, is uploaded after this turn — " +
+          "if you mention the cost, call it approximate."
+        : "";
+      return text(`${status}: ${detail}.${note}`, { run_id, usage: result.usage, response: result.response });
     },
   );
 }
