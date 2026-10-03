@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Mascot } from "@/components/mascot";
 import { SolutionDiagram } from "@/components/solution-diagram";
 import { VoiceBar } from "@/components/voice-bar";
 import {
@@ -66,6 +67,10 @@ export function HomeStudio({
   const picks = useRef<ClarifyPick[]>([]);
   const busy = useRef(false);
   const asking = items.some((item) => item.kind === "ask" && !item.locked);
+  const searching = items.some((item) => item.kind === "estimate" && item.phase === "searching");
+  const latestDone = [...items]
+    .reverse()
+    .find((item) => item.kind === "estimate" && item.phase === "done" && item.answer);
   const open = items.length > 0;
 
   function updateThread(lane: InputMode, updater: (current: ThreadItem[]) => ThreadItem[]) {
@@ -236,23 +241,40 @@ export function HomeStudio({
   }
 
   return (
-    <section id="workspace" className="scroll-mt-24 px-4 pb-4 sm:px-6" aria-labelledby="workspace-title">
+    <section
+      id="workspace"
+      className={`scroll-mt-24 px-4 pb-4 sm:px-6 ${open ? "pt-8" : ""}`}
+      aria-labelledby="workspace-title"
+    >
       <h2 id="workspace-title" className="sr-only">
         Estimate
       </h2>
       <div className="mx-auto flex max-w-3xl flex-col">
-        <div
-          role="radiogroup"
-          aria-label="Input type"
-          className="mx-auto mb-4 inline-flex items-center rounded-full bg-neutral-100 p-1"
-        >
-          <ModeButton selected={promptMode} onClick={() => onMode("prompt")}>
-            Prompt
-          </ModeButton>
-          <ModeButton selected={!promptMode} onClick={() => onMode("natural")}>
-            Natural language
-          </ModeButton>
-        </div>
+        {open ? null : (
+          <div className="pt-14 text-center sm:pt-20">
+            <Mascot preload className="mx-auto h-28 w-auto sm:h-36" />
+            <h1 className="mx-auto mt-6 max-w-[16ch] font-serif text-[2.6rem] leading-[0.98] font-medium tracking-[-0.03em] sm:text-6xl md:text-[4.25rem]">
+              Meet Abacus, your token saver.
+            </h1>
+            <p className="mx-auto mt-5 max-w-md text-balance text-base leading-7 text-neutral-500 sm:text-lg">
+              See the cost before you send it, then take the cheaper path.
+            </p>
+          </div>
+        )}
+        {open ? null : (
+          <div
+            role="radiogroup"
+            aria-label="Input type"
+            className="mx-auto mt-8 mb-4 inline-flex items-center rounded-full bg-neutral-100 p-1"
+          >
+            <ModeButton selected={promptMode} onClick={() => onMode("prompt")}>
+              Prompt
+            </ModeButton>
+            <ModeButton selected={!promptMode} onClick={() => onMode("natural")}>
+              Natural language
+            </ModeButton>
+          </div>
+        )}
         <div
           className={
             open
@@ -342,39 +364,38 @@ export function HomeStudio({
             </p>
           ) : null}
           {open ? (
-            <div className="mt-4 flex flex-col gap-5 px-2 pb-2">
-              {items.map((item) => (
-                <div key={item.id} data-turn="">
-                  {item.kind === "user" ? (
-                    <div className="flex justify-end">
-                      <p className="max-w-[min(36rem,88%)] rounded-[20px] bg-[#e7eef8] px-4 py-3 text-[15px] leading-6 text-[#1c2834]">
+            <div className="mt-4 px-2 pb-2">
+              {searching ? (
+                <LoadingLook />
+              ) : asking ? (
+                <div className="flex flex-col gap-5">
+                  {items.map((item) =>
+                    item.kind === "user" ? (
+                      <div key={item.id} data-turn="" className="flex justify-end">
+                        <p className="max-w-[min(36rem,88%)] rounded-[20px] bg-[#e7eef8] px-4 py-3 text-[15px] leading-6 text-[#1c2834]">
+                          {item.text}
+                        </p>
+                      </div>
+                    ) : item.kind === "note" ? (
+                      <p key={item.id} data-turn="" className="max-w-[40rem] text-[15px] leading-7 text-neutral-700">
                         {item.text}
                       </p>
-                    </div>
-                  ) : null}
-                  {item.kind === "note" ? (
-                    <p className="max-w-[40rem] text-[15px] leading-7 text-neutral-700">{item.text}</p>
-                  ) : null}
-                  {item.kind === "ask" ? (
-                    <QuestionCard item={item} onPick={(choice) => reply(item.id, choice)} />
-                  ) : null}
-                  {item.kind === "estimate" && item.phase === "searching" ? (
-                    <p className="text-[15px] text-neutral-400" aria-live="polite">
-                      Searching other cases...
-                    </p>
-                  ) : null}
-                  {item.kind === "estimate" && item.phase === "done" ? (
-                    <div className="flex flex-col gap-4">
-                      <p className="max-w-[40rem] text-[15px] leading-7">{item.prose}</p>
-                      {item.answer ? <SolutionDiagram answer={item.answer} /> : null}
-                    </div>
-                  ) : null}
+                    ) : item.kind === "ask" ? (
+                      <div key={item.id} data-turn="">
+                        <QuestionCard item={item} onPick={(choice) => reply(item.id, choice)} />
+                      </div>
+                    ) : null,
+                  )}
                 </div>
-              ))}
+              ) : latestDone?.kind === "estimate" && latestDone.answer ? (
+                <div data-turn="">
+                  <SolutionDiagram answer={latestDone.answer} />
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
-        {promptMode || asking ? null : (
+        {open || promptMode || asking ? null : (
           <div className="mx-auto mt-4 flex max-w-xl flex-wrap justify-center gap-2">
             {developerStarters.map((starter) => (
               <button
@@ -390,6 +411,21 @@ export function HomeStudio({
         )}
       </div>
     </section>
+  );
+}
+
+const REFERENCE_COUNT = 158;
+
+function LoadingLook() {
+  return (
+    <div data-turn="" className="flex flex-col items-center gap-5 px-4 py-10 text-center">
+      <div className="animate-[abacus-spin_8s_linear_infinite]">
+        <Mascot className="h-24 w-auto" />
+      </div>
+      <p className="text-[15px] text-neutral-500" aria-live="polite">
+        Looking at {REFERENCE_COUNT} other prompts / references
+      </p>
+    </div>
   );
 }
 
