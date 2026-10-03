@@ -59,7 +59,7 @@ Don't insert into the tables directly. `record_run(payload jsonb)` is the single
 | `task_type`, `scope` | | Optional tags; `scope` is `S` · `M` · `L` |
 | `install_hash` | | sha256 of the client's install id — never the raw id |
 | `models` | ✅ for `recorded` | Array of `{ model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens }`. Missing numbers count as 0. |
-| `embedding` | **don't send** | The backend computes it (gte-small, 384 dims). Rows without one aren't searchable yet. |
+| `embedding` | **don't send** | The backend computes it (gte-small, 384 dims): `submit` embeds immediately; rows written by `record_run` are embedded by a background job within about a minute. |
 
 Returns `{ "run_id": "…", "status": "recorded" | "pending", "cost_usd": 0.42 | null, "models": 2 }`.
 `cost_usd` is null when any model isn't in `model_pricing` yet.
@@ -108,7 +108,7 @@ const { data } = await supabase.rpc("recent_runs", { max_rows: 50 });
 Only recorded, non-flagged tasks are returned, newest first, max 200. This function is public on
 purpose (Supabase's advisor flags it as a warning); it never returns install hashes or embeddings.
 
-Estimates come from the `estimate` Edge Function (coming next), not from direct database calls.
+Estimates come from the `estimate` Edge Function (see FRONTEND.md §8), not from direct database calls.
 
 ---
 
@@ -169,7 +169,7 @@ Primary key: `(run_id, model)`.
 | `input_per_mtok`, `output_per_mtok`, `cache_read_per_mtok`, `cache_write_per_mtok` | numeric |
 | `updated_at` | timestamptz |
 
-Readable by anyone; written by Shah. **Currently empty** — costs are null until it's seeded.
+Readable by anyone. Seeded with ~370 models (Claude prices from Anthropic's list prices, the rest from the team's import). A model missing here gives a null cost.
 Costs are fixed at write time, so a price change doesn't rewrite history.
 
 ## Functions

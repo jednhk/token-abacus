@@ -8,7 +8,7 @@ field means, how to fetch it, and how to show it. Database details: [SCHEMA.md](
 | Data | How | Status |
 |---|---|---|
 | **Recent tasks** — the live feed of real tasks people ran, with models, tokens and cost | `recent_runs` database function | ✅ Live (empty until data is uploaded) |
-| **Estimate** — "what will this task cost?" | `estimate` Edge Function | 🔜 Coming — contract in §8 so you can build against it now |
+| **Estimate** — "what will this task cost?" | `estimate` Edge Function | ✅ Live — §8 |
 
 The website uses the **publishable key** only. It can call `recent_runs` and nothing else — the
 tables are locked by row-level security, so `supabase.from("runs").select()` returns no rows.
@@ -230,12 +230,20 @@ export function RecentTasks({ runs }: { runs: RecentRun[] }) {
 
 Note: `recent_runs` doesn't return an id. Use `created_at + task` as the React key.
 
-## 8. Estimate (coming next)
+## 8. Estimate
 
 The estimate box in `HomeStudio` currently uses the scripted `buildReply()` in
-`src/lib/content.ts`. When the `estimate` Edge Function is live, swap it in.
+`src/lib/content.ts`. The `estimate` Edge Function is live (~0.5 s warm; the first call after
+idle can take a few seconds), so you can swap it in now.
 
-**Call it from the server** (a Route Handler or Server Action), not the browser:
+What to expect from the current data (mostly benchmark bug-fix tasks):
+- Bug-fix style prompts ("Fix a Django ORM bug where…") return a recommendation, usually high confidence.
+- Unrelated prompts (a restaurant website, a blog post) return `confidence: "none"` and
+  `recommendation: null`. That's deliberate — design the "no estimate yet" state, it will be common
+  until more kinds of tasks are in the database.
+
+**Call it from the server** (a Route Handler or Server Action). It also allows browser calls
+(CORS is open), but going through your own route keeps the URL in one place:
 
 ```ts
 // src/app/api/estimate/route.ts

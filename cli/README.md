@@ -51,7 +51,7 @@ the end. Logs: `~/.token-abacus/debug.log`. Remove with `claude mcp remove token
 | 2 | Claude Code transcript reader | ✅ matches an independent count on a real 10M-token session |
 | 3 | Run lifecycle + state file | ✅ |
 | 4 | Safety nets: next estimate, shutdown, killed process, outbox | ✅ covered by e2e tests |
-| 5 | Real API | waiting on `estimate` / `submit` functions (Shah) |
+| 5 | Real API | ✅ live — `npx tsx test/live-smoke.ts` runs estimate → submit against Supabase (writes one real row; delete it after) |
 | 6 | Real use in Claude Code | next — try with `TOKEN_ABACUS_API=mock` now |
 | 7 | `init` command | TODO (`src/cli.ts`) |
 | 8 | Codex reader | TODO (`src/harness/codex.ts`) — needs a real rollout file |

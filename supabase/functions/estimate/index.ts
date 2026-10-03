@@ -1,0 +1,139 @@
+import { db } from "../_shared/db.ts";
+import { embed } from "../_shared/embed.ts";
+import { error, json, rateLimited, readJson } from "../_shared/http.ts";
+
+// POST { prompt, model?, harness? } → recommended model + token/USD budget, from similar past tasks.
+// Contract: docs/PLAN.md §5 and docs/FRONTEND.md §8.
+
+// Calibrated on the seeded data (gte-small): a bug fix's nearest other bug fix scores 0.83–0.92,
+// while unrelated requests (a website, OAuth login, a blog post) top out at 0.73–0.78 against it.
+// Below the threshold there is no estimate — an honest "none" beats a confident wrong number.
+const THRESHOLD = 0.80;            // similarity needed to count as "a similar task"
+const NEIGHBORS = 300;             // rows, not distinct tasks: imports repeat a task across many models
+const MIN_TASKS = 3;               // a model needs this many similar tasks to be recommended
+const MIN_SUCCESS_RATE = 0.7;
+const HEADROOM = 1.15;             // budget = p85 × 1.15
+
+interface StatsRow {
+  model: string;
+  n: number;
+  avg_similarity: number;
+  success_rate: number | null;
+  p50_tokens: number | null;
+  p85_tokens: number | null;
+  p95_tokens: number | null;
+  p50_cost: number | null;
+  p85_cost: number | null;
+  p95_cost: number | null;
+}
+
+interface MatchRow {
+  task: string;
+  primary_model: string;
+  total_tokens: number;
+  cost_usd: number | null;
+  similarity: number;
+}
+
+const round2 = (n: number | null) => (n === null ? null : Math.round(n * 100) / 100);
+
+async function stats(vector: number[], threshold: number): Promise<StatsRow[]> {
+  const { data, error: rpcError } = await db.rpc("estimate_stats", {
+    query_embedding: JSON.stringify(vector),
+    match_threshold: threshold,
+    match_count: NEIGHBORS,
+  });
+  if (rpcError) throw rpcError;
+  return (data ?? []) as StatsRow[];
+}
+
+function candidates(rows: StatsRow[]): StatsRow[] {
+  return rows.filter((r) => r.n >= MIN_TASKS && r.p85_tokens !== null);
+}
+
+/** Cheapest model that usually succeeds; the user's own model if it has enough data. */
+function pick(rows: StatsRow[], requested?: string): StatsRow | null {
+  if (rows.length === 0) return null;
+  if (requested) {
+    const own = rows.find((r) => r.model === requested);
+    if (own) return own;
+  }
+  const reliable = rows.filter((r) => r.success_rate === null || r.success_rate >= MIN_SUCCESS_RATE);
+  const pool = reliable.length > 0 ? reliable : rows;
+  const priced = pool.filter((r) => r.p50_cost !== null);
+  if (priced.length > 0) return priced.reduce((a, b) => (b.p50_cost! < a.p50_cost! ? b : a));
+  return pool.reduce((a, b) => (b.n > a.n ? b : a));
+}
+
+function confidence(row: StatsRow): "high" | "medium" | "low" {
+  if (row.n < 5) return "low";
+  const spread = row.p50_tokens ? row.p85_tokens! / row.p50_tokens : Infinity;
+  if (row.n >= 10 && row.avg_similarity >= 0.85 && spread < 2) return "high";
+  return "medium";
+}
+
+Deno.serve(async (req) => {
+  const body = await readJson(req);
+  if (body instanceof Response) return body;
+  if (rateLimited(req, 120)) return error("Too many requests. Try again in a minute.", 429);
+
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  if (prompt.length < 3 || prompt.length > 2000) return error('"prompt" must be 3–2000 characters.', 400);
+  const requested = typeof body.model === "string" ? body.model : undefined;
+
+  try {
+    const vector = await embed(prompt);
+    const [rows, matchResult] = await Promise.all([
+      stats(vector, THRESHOLD),
+      db.rpc("match_runs", { query_embedding: JSON.stringify(vector), match_count: 100 }),
+    ]);
+    if (matchResult.error) throw matchResult.error;
+
+    const chosen = pick(candidates(rows), requested);
+    const budgetTokens = chosen && Math.round(chosen.p85_tokens! * HEADROOM);
+    const budgetUsd = chosen && chosen.p85_cost !== null ? chosen.p85_cost * HEADROOM : null;
+
+    // One entry per distinct task (imports repeat a task across models), preferring the run on the
+    // recommended model so the example matches the recommendation.
+    const byTask = new Map<string, MatchRow>();
+    for (const m of (matchResult.data ?? []) as MatchRow[]) {
+      if (m.similarity < THRESHOLD) continue;
+      const seen = byTask.get(m.task);
+      if (!seen || (chosen && m.primary_model === chosen.model && seen.primary_model !== chosen.model)) {
+        byTask.set(m.task, m);
+      }
+    }
+    const similar = [...byTask.values()].slice(0, 5).map((m) => ({
+      title: m.task,
+      model: m.primary_model,
+      total_tokens: m.total_tokens,
+      cost_usd: round2(m.cost_usd),
+      similarity: Math.round(m.similarity * 1000) / 1000,
+    }));
+
+    return json({
+      recommendation: chosen && {
+        model: chosen.model,
+        budget_tokens: budgetTokens,
+        budget_usd: round2(budgetUsd),
+        // The ceiling is never below the budget, even when p95 sits close to p85.
+        ceiling_tokens: Math.max(Math.round(chosen.p95_tokens!), budgetTokens!),
+        ceiling_usd: round2(chosen.p95_cost === null ? null : Math.max(chosen.p95_cost, budgetUsd ?? 0)),
+      },
+      confidence: chosen ? confidence(chosen) : "none",
+      models: rows.map((r) => ({
+        model: r.model,
+        n: r.n,
+        success_rate: r.success_rate === null ? null : Math.round(r.success_rate * 100) / 100,
+        p50_tokens: r.p50_tokens === null ? null : Math.round(r.p50_tokens),
+        p85_tokens: r.p85_tokens === null ? null : Math.round(r.p85_tokens),
+        p50_usd: round2(r.p50_cost),
+        p85_usd: round2(r.p85_cost),
+      })),
+      similar_tasks: similar,
+    });
+  } catch (e) {
+    console.error(`estimate failed: ${e instanceof Error ? e.message : JSON.stringify(e)}`);
+    return error("Estimate failed. Try again shortly.", 500);
+  }
+});

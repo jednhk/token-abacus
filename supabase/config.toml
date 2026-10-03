@@ -413,3 +413,14 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# Token Abacus functions are called without Supabase keys (MCP server, website route handler,
+# pg_cron); each validates its own input and rate-limits.
+[functions.estimate]
+verify_jwt = false
+
+[functions.submit]
+verify_jwt = false
+
+[functions.embed-backfill]
+verify_jwt = false
