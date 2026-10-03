@@ -43,7 +43,8 @@ Deno.serve(async (req) => {
     const requests = Array.isArray(entry.requests)
       ? (entry.requests as unknown[]).slice(0, MAX_REQUESTS)
           .filter((r): r is unknown[] => Array.isArray(r))
-          .map((r) => [0, 1, 2, 3, 4].map((i) => count(r[i])))
+          // [input, output, cache_read, cache_write, cache_write_1h, fast]
+          .map((r) => [0, 1, 2, 3, 4, 5].map((i) => count(r[i])))
       : undefined;
     return [{
       model,

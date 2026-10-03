@@ -136,7 +136,7 @@ test("estimate → work → submit uploads exact tokens from the transcript", as
   assert.equal(payload.token_source, "transcript");
   assert.deepEqual(payload.models, [{
     model: "claude-sonnet-5-5", input_tokens: 150, output_tokens: 3000, cache_read_tokens: 110000, cache_write_tokens: 3000,
-    cache_write_1h_tokens: 3000, requests: [[100, 2000, 50000, 3000, 3000], [50, 1000, 60000, 0, 0]],
+    cache_write_1h_tokens: 3000, requests: [[100, 2000, 50000, 3000, 3000, 0], [50, 1000, 60000, 0, 0, 0]],
   }]);
   await session.client.close();
 });
@@ -244,7 +244,7 @@ test("final recount covers the whole turn, including requests logged after submi
     cache_read_tokens: 20000 + 50000 + 55000 + 57000,
     cache_write_tokens: 6000,
     cache_write_1h_tokens: 0,
-    requests: [[0, 300, 20000, 0, 0], [0, 3500, 50000, 6000, 0], [0, 240, 55000, 0, 0], [0, 480, 57000, 0, 0]],
+    requests: [[0, 300, 20000, 0, 0, 0], [0, 3500, 50000, 6000, 0, 0], [0, 240, 55000, 0, 0, 0], [0, 480, 57000, 0, 0, 0]],
   }]);
   assert.equal(final.outcome, "success");
   assert.equal(final.summary, "Built the calculator");

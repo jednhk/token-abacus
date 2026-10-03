@@ -131,8 +131,9 @@ export async function readUsage(files: string[], start: number, end: number): Pr
       totals.cache_read_tokens += cacheRead;
       totals.cache_write_tokens += cacheWrite;
       totals.cache_write_1h_tokens += cacheWrite1h;
-      // Per request, so long-context pricing tiers (decided per request) can be applied exactly.
-      totals.requests!.push([input, output, cacheRead, cacheWrite, cacheWrite1h]);
+      // Per request, so long-context tiers and fast mode (both decided per request) price exactly.
+      const fast = usage.speed === "fast" ? 1 : 0;
+      totals.requests!.push([input, output, cacheRead, cacheWrite, cacheWrite1h, fast]);
       byModel.set(model, totals);
     }
   }

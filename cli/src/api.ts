@@ -15,7 +15,7 @@ export interface ModelUsage {
   cache_write_tokens: number;
   /** The part of cache_write_tokens written with a 1-hour lifetime (billed at a higher rate). */
   cache_write_1h_tokens: number;
-  /** Per request: [input, output, cache_read, cache_write, cache_write_1h]. */
+  /** Per request: [input, output, cache_read, cache_write, cache_write_1h, fast (1 = fast mode)]. */
   requests?: number[][];
 }
 

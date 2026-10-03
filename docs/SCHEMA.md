@@ -58,7 +58,7 @@ Don't insert into the tables directly. `record_run(payload jsonb)` is the single
 | `started_at`, `ended_at` | | ISO 8601 timestamps |
 | `task_type`, `scope` | | Optional tags; `scope` is `S` · `M` · `L` |
 | `install_hash` | | sha256 of the client's install id — never the raw id |
-| `models` | ✅ for `recorded` | Array of `{ model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens?, requests? }`. Missing numbers count as 0. `cache_write_1h_tokens` = the part of `cache_write_tokens` written with a 1-hour lifetime (billed at 2× input on Claude vs 1.25× for 5-minute; Claude Code uses 1-hour). `requests` = per-request `[input, output, cache_read, cache_write, cache_write_1h]`; when sent, each request is priced at its own long-context tier, so the cost is exact. |
+| `models` | ✅ for `recorded` | Array of `{ model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens?, requests? }`. Missing numbers count as 0. `cache_write_1h_tokens` = the part of `cache_write_tokens` written with a 1-hour lifetime (billed at 2× input on Claude vs 1.25× for 5-minute; Claude Code uses 1-hour). `requests` = per-request `[input, output, cache_read, cache_write, cache_write_1h, fast]` (`fast` = 1 for fast-mode requests); when sent, each request is priced at its own long-context tier and speed, so the cost is exact. |
 | `embedding` | **don't send** | The backend computes it (gte-small, 384 dims): `submit` embeds immediately; rows written by `record_run` are embedded by a background job within about a minute. |
 
 Returns `{ "run_id": "…", "status": "recorded" | "pending", "cost_usd": 0.42 | null, "models": 2 }`.
@@ -169,6 +169,7 @@ index on `runs`; an approximate index is worth revisiting only past ~100k distin
 | `cost_usd` | numeric | Priced at write time from `model_pricing`; null if unpriced |
 | `cache_write_1h_tokens` | bigint | Part of `cache_write_tokens` with a 1-hour lifetime |
 | `priced_per_request` | boolean | Cost computed request by request (exact long-context tiers) |
+| `fast_requests` | integer | Requests run in fast mode (billed at `fast_multiplier`× the standard price) |
 
 Primary key: `(run_id, model)`.
 
@@ -183,6 +184,7 @@ Primary key: `(run_id, model)`.
 | `tiers` | jsonb: long-context prices `[{ min_prompt_tokens, input_per_mtok, … }]`, applied per request |
 | `source`, `source_id` | `openrouter` + catalog id, or `manual` |
 | `locked` | true = the hourly sync never overwrites this row (manual overrides) |
+| `fast_multiplier` | fast-mode price multiple (2 on Opus 5.5 / 5 / 4.8); not touched by the sync |
 | `checked_at`, `updated_at` | last seen by the sync / last price change |
 
 Readable by anyone. **Refreshed hourly** from OpenRouter's public catalog by the `sync-pricing` Edge Function (pg_cron, minute 7); its Claude prices match Anthropic's list prices. Every price change is kept in `model_price_history` (`model`, the prices, `valid_from`), so any past cost can be traced to the prices in force. A model missing here gives a null cost. `reprice_runs()` recomputes stored costs from current prices — for corrections only.
