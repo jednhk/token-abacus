@@ -1,9 +1,13 @@
 import { HomeStudio } from "@/components/home-studio";
-import { LeanSetups } from "@/components/lean-setups";
 import { Mascot } from "@/components/mascot";
 import { SiteHeader } from "@/components/site-header";
+import { TaskFeed } from "@/components/task-feed";
+import { loadTaskFeed } from "@/lib/runs";
 
-export default function Home() {
+export const revalidate = 30;
+
+export default async function Home() {
+  const feed = await loadTaskFeed();
   return (
     <>
       <SiteHeader />
@@ -17,10 +21,10 @@ export default function Home() {
             See the cost before you send it, then take the cheaper path.
           </p>
         </section>
-        <div className="mt-10 sm:mt-14">
+        <div className="mt-8">
           <HomeStudio />
         </div>
-        <LeanSetups />
+        <TaskFeed feed={feed} />
       </main>
       <footer className="border-t border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
         Abacus estimates tokens before you spend them.

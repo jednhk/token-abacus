@@ -38,7 +38,7 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-5.5rem)] w-full max-w-3xl flex-col items-center justify-center gap-8 px-4 py-10 lg:max-w-4xl lg:flex-row lg:items-center lg:gap-8">
+    <div className="mx-auto flex min-h-[calc(100vh-5.5rem)] w-full max-w-3xl flex-col items-center justify-center gap-10 px-4 py-10 lg:max-w-5xl lg:flex-row lg:items-center lg:gap-24">
       <div className="w-full max-w-[26rem] shrink-0">
         <div className="rounded-[28px] border border-neutral-200 bg-white px-5 py-8 shadow-[0_16px_50px_rgba(0,0,0,0.05)] sm:px-8">
           <Mascot className="mx-auto h-16 w-auto" />
