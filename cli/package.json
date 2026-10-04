@@ -1,6 +1,6 @@
 {
   "name": "token-abacus",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Know what an AI coding task will cost before you run it. Local MCP server for Claude Code, Codex and Cursor.",
   "type": "module",
   "bin": {

@@ -12,9 +12,10 @@ const SIZE_GUIDE =
   "large: multiple services or apps, infrastructure-as-code or cloud deployment, mobile + backend, or many features; several hours.";
 
 const ESTIMATE_DESCRIPTION =
-  "Get a cost and token-budget estimate for a coding task before starting it. Call this once at the " +
-  "start of each distinct task the user asks for. Describe the task in one specific sentence (what + " +
-  "stack), not the user's raw words. Skip it for questions and trivial one-step edits.";
+  "Get a cost and token-budget estimate for a coding task. Call this FIRST, before reading files or " +
+  "running any commands, once per distinct task the user asks for. Describe the task in one specific " +
+  "sentence (what + stack, as far as you can tell from the request) and guess size and stack without " +
+  "exploring; an empty stack is fine. Skip it for questions and trivial one-step edits.";
 
 const SUBMIT_DESCRIPTION =
   "Record a finished task so future estimates improve. Call this when the task you estimated is " +
@@ -67,7 +68,7 @@ export function registerTools(server: McpServer): void {
         size: z.enum(["small", "medium", "large"]).describe(SIZE_GUIDE),
         work_kind: z.enum(KINDS).describe("new_app = building something from scratch."),
         stack: z.array(z.string()).max(8)
-          .describe('Main technologies, lowercase, most important first, e.g. ["node", "express", "socket.io", "sqlite"].'),
+          .describe('Main technologies, lowercase, most important first, e.g. ["node", "express", "socket.io", "sqlite"]. Your best guess from the request; [] if unknown.'),
         model: z.string().optional().describe("The model you are running as, if known."),
         cwd: z.string().optional()
           .describe("Only if asked: the directory this session was started in. Used locally only, never uploaded."),
