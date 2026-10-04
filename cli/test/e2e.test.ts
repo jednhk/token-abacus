@@ -280,6 +280,24 @@ test("two tasks in one turn don't count each other's tokens", async () => {
   await session.client.close();
 });
 
+// Real bug (2026-10-04): the agent passed cwd = the project it was editing, which differed from
+// where the session was started; the server looked for the log there and found nothing.
+test("a cwd argument pointing elsewhere doesn't hide the session log", async () => {
+  const session = await startSession(setup());
+  const result: any = await session.client.callTool({
+    name: "estimate_task",
+    arguments: { task: "Build a small donor matching web app", size: "medium", work_kind: "new_app",
+                 stack: ["node"], cwd: "/some/other/project" },
+  });
+  const runId = result.structuredContent.run_id;
+  append(session.transcript, usageLine({ requestId: "cwd-1", time: new Date(), output: 1234 }));
+  await session.client.callTool({ name: "submit_run", arguments: { run_id: runId, outcome: "success", summary: "Built it" } });
+  const payload = submits.filter((s) => s.run_id === runId).at(-1);
+  assert.equal(payload.token_source, "transcript");
+  assert.equal(payload.models[0].output_tokens, 1234);
+  await session.client.close();
+});
+
 test("secrets in task and summary are scrubbed before upload", async () => {
   const session = await startSession(setup());
   const runId = await callEstimate(session, "Rotate key sk-ant-api03-abcdefghijklmnopqrstuv for ops@acme.io");

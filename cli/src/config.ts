@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync, writeFil
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 /** ~/.token-abacus, overridable for tests. */
 export function homeDir(): string {

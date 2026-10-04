@@ -70,7 +70,7 @@ export function registerTools(server: McpServer): void {
           .describe('Main technologies, lowercase, most important first, e.g. ["node", "express", "socket.io", "sqlite"].'),
         model: z.string().optional().describe("The model you are running as, if known."),
         cwd: z.string().optional()
-          .describe("Absolute path of the project directory. Used locally only, never uploaded."),
+          .describe("Only if asked: the directory this session was started in. Used locally only, never uploaded."),
       },
     },
     async ({ task, size, work_kind, stack, model, cwd }) => {
@@ -82,7 +82,12 @@ export function registerTools(server: McpServer): void {
       }
 
       const harness = detectHarness(client()?.name);
-      const projectDir = cwd ?? process.cwd();
+      // The coding tool starts this server in the session's launch directory, which is where its
+      // session log lives. A `cwd` argument (often the project the agent is editing, which can
+      // differ) is only a fallback when no log is found there.
+      const launchDir = process.cwd();
+      const launchLog = await findLog(harness, launchDir);
+      const projectDir = launchLog || !cwd ? launchDir : cwd;
       const run: Run = {
         run_id: randomUUID(),
         task,
@@ -90,7 +95,7 @@ export function registerTools(server: McpServer): void {
         harness,
         client_version: client()?.version,
         cwd: projectDir,
-        log_file: await findLog(harness, projectDir),
+        log_file: launchLog ?? (await findLog(harness, projectDir)),
         started_at: new Date(now).toISOString(),
         pid: process.pid,
         floor: nextFloor(),
