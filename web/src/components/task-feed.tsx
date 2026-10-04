@@ -8,7 +8,7 @@ export function TaskFeed({ feed }: { feed: TaskFeed }) {
   const sample = feed.source === "sample";
 
   return (
-    <section className="mx-auto max-w-3xl px-4 pt-10 pb-10 sm:px-6 sm:pt-16 sm:pb-12">
+    <section id="tasks" className="mx-auto max-w-3xl scroll-mt-24 px-4 pt-10 pb-10 sm:px-6 sm:pt-16 sm:pb-12">
       <h2 className="font-serif text-[2rem] leading-none tracking-tight sm:text-4xl">
         What tasks actually cost
       </h2>
