@@ -1,0 +1,36 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deploy one push at a time so an older build can't finish last and take over the domain.
+concurrency:
+  group: vercel-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_bugDTPC6FssLSTJZam78BhYG
+      VERCEL_PROJECT_ID: prj_f06oLc5rxYl6NpJA5Ol498ntvTgP
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Check token
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Add a VERCEL_TOKEN repository secret (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+      # The Vercel project builds from web/, so deploy from the repo root.
+      - name: Deploy to production
+        run: npx --yes vercel@62 deploy --prod --yes --token="$VERCEL_TOKEN"
