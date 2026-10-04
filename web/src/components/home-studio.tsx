@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Mascot } from "@/components/mascot";
 import { SolutionDiagram } from "@/components/solution-diagram";
-import { VoiceBar } from "@/components/voice-bar";
+import { CostBreakdown } from "@/components/cost-breakdown";
+import { VoiceOrb } from "@/components/voice-orb";
 import {
   questionsFor,
   shapeEstimate,
@@ -17,6 +18,8 @@ import {
   type InputMode,
 } from "@/lib/content";
 import { demoAnswer, type DemoAnswer } from "@/lib/demo-answer";
+import type { Breakdown } from "@/lib/breakdown";
+import { useLiveAgent, type Caption } from "@/lib/use-live-agent";
 
 type ThreadItem =
   | { id: string; kind: "user"; text: string }
@@ -36,7 +39,8 @@ type ThreadItem =
       phase: "searching" | "done";
       prose: string;
       answer?: DemoAnswer;
-    };
+    }
+  | { id: string; kind: "breakdown"; phase: "searching" | "done"; result?: Breakdown };
 
 export function HomeStudio({
   mode,
@@ -54,7 +58,6 @@ export function HomeStudio({
     prompt: false,
     natural: false,
   });
-  const [recording, setRecording] = useState(false);
   const [voiceNote, setVoiceNote] = useState("");
   const promptMode = mode === "prompt";
   const items = threads[mode];
@@ -67,11 +70,15 @@ export function HomeStudio({
   const picks = useRef<ClarifyPick[]>([]);
   const busy = useRef(false);
   const asking = items.some((item) => item.kind === "ask" && !item.locked);
-  const searching = items.some((item) => item.kind === "estimate" && item.phase === "searching");
+  const searching = items.some(
+    (item) => (item.kind === "estimate" || item.kind === "breakdown") && item.phase === "searching",
+  );
   const latestDone = [...items]
     .reverse()
-    .find((item) => item.kind === "estimate" && item.phase === "done" && item.answer);
+    .find((item) => (item.kind === "estimate" || item.kind === "breakdown") && item.phase === "done");
   const open = items.length > 0;
+  const agent = useLiveAgent(voiceTask);
+  const note = voiceNote || agent.note;
 
   function updateThread(lane: InputMode, updater: (current: ThreadItem[]) => ThreadItem[]) {
     setThreads((current) => ({ ...current, [lane]: updater(current[lane]) }));
@@ -101,7 +108,7 @@ export function HomeStudio({
     if (!node) return;
     node.style.height = "auto";
     node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
-  }, [draft, recording, open]);
+  }, [draft, open]);
 
   useEffect(() => {
     const latest = document.querySelector("[data-turn]:last-of-type");
@@ -109,7 +116,6 @@ export function HomeStudio({
   }, [items]);
 
   useEffect(() => {
-    setRecording(false);
     setVoiceNote("");
   }, [mode]);
 
@@ -197,7 +203,7 @@ export function HomeStudio({
 
   async function finishDirect(lane: InputMode, id: string, text: string, ticket: number) {
     const answer = await settleChart(text, [], demoAnswer(text));
-    if (request.current[lane] !== ticket) return;
+    if (request.current[lane] !== ticket) return null;
     updateThread(lane, (current) =>
       current.map((item) =>
         item.id === id && item.kind === "estimate"
@@ -206,6 +212,56 @@ export function HomeStudio({
       ),
     );
     setPending(lane, false);
+    return answer;
+  }
+
+  // The voice agent scopes the task out loud and splits it into subtasks; each
+  // subtask is priced from recorded runs and the breakdown goes on screen.
+  async function voiceTask(args: Record<string, unknown>) {
+    const lane = mode;
+    const task = String(args.task ?? "").trim();
+    if (!task) return "No task was given. Ask them what they want to build.";
+    if (pendingMode[lane]) return "Another estimate is still running. Ask them to wait a moment.";
+    const id = crypto.randomUUID();
+    updateThread(lane, (current) => [
+      ...current.map((item) => (item.kind === "ask" ? { ...item, locked: true } : item)),
+      { id: crypto.randomUUID(), kind: "user", text: task },
+      { id, kind: "breakdown", phase: "searching" },
+    ]);
+    const ticket = ++request.current[lane];
+    setPending(lane, true);
+    busy.current = false;
+    const result = await requestBreakdown(task, args.models, args.subtasks);
+    if (request.current[lane] !== ticket) return "That estimate was replaced by a newer one.";
+    updateThread(lane, (current) =>
+      current.map((item) => (item.id === id && item.kind === "breakdown" ? { ...item, phase: "done", result: result ?? undefined } : item)),
+    );
+    setPending(lane, false);
+    if (!result) return "The price lookup failed. Say sorry and offer to try again.";
+    return {
+      say: result.summary,
+      total_usd: result.total_usd,
+      up_to_usd: result.total_high_usd,
+      subtasks_priced: `${result.priced} of ${result.subtasks.length}`,
+      subtasks: result.subtasks.map((row) => ({
+        title: row.title,
+        usd: row.usd,
+        model: row.model,
+        similar_recorded_tasks: row.similar,
+        from_a_model_they_did_not_list: row.outside,
+      })),
+    };
+  }
+
+  async function talk() {
+    if (agent.active) {
+      agent.stop();
+      return;
+    }
+    setVoiceNote("");
+    if ((await agent.start()) === "unavailable") {
+      setVoiceNote("Voice isn't switched on here yet. Type your task below.");
+    }
   }
 
   async function finishScoped(id: string, ticket: number) {
@@ -251,14 +307,23 @@ export function HomeStudio({
       </h2>
       <div className="mx-auto flex max-w-3xl flex-col">
         {open ? null : (
-          <div className="pt-14 text-center sm:pt-20">
-            <Mascot preload className="mx-auto h-28 w-auto sm:h-36" />
-            <h1 className="mx-auto mt-6 max-w-[16ch] font-serif text-[2.6rem] leading-[0.98] font-medium tracking-[-0.03em] sm:text-6xl md:text-[4.25rem]">
+          <div className="pt-10 text-center sm:pt-14">
+            <h1 className="mx-auto max-w-[16ch] font-serif text-[2.6rem] leading-[0.98] font-medium tracking-[-0.03em] sm:text-6xl md:text-[4.25rem]">
               Meet Abacus, your token saver.
             </h1>
             <p className="mx-auto mt-5 max-w-md text-balance text-base leading-7 text-neutral-500 sm:text-lg">
               See the cost before you send it, then take the cheaper path.
             </p>
+            <button
+              type="button"
+              aria-label={agent.active ? "End the voice conversation" : "Talk to Abacus"}
+              aria-pressed={agent.active}
+              className="mx-auto mt-6 block rounded-full outline-offset-4 focus-visible:outline-2 focus-visible:outline-black"
+              onClick={() => void talk()}
+            >
+              <VoiceOrb size={220} state={agent.state} levels={agent.levels} />
+            </button>
+            <VoiceCaption state={agent.state} caption={agent.caption} idle="Tap the orb and say what you're building" />
           </div>
         )}
         {open ? null : (
@@ -282,6 +347,21 @@ export function HomeStudio({
               : ""
           }
         >
+          {open && agent.active ? (
+            <div className="mb-3 flex items-center gap-3 rounded-2xl bg-neutral-50 px-3 py-2">
+              <VoiceOrb size={56} state={agent.state} levels={agent.levels} className="shrink-0" />
+              <div className="min-w-0 flex-1 text-left">
+                <VoiceCaption state={agent.state} caption={agent.caption} idle="" compact />
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-sm hover:border-black"
+                onClick={agent.stop}
+              >
+                End
+              </button>
+            </div>
+          ) : null}
           <form
             className={`flex items-end gap-2 bg-white p-2 ${
               open
@@ -293,25 +373,7 @@ export function HomeStudio({
               send(draft);
             }}
           >
-            {recording ? (
-              <VoiceBar
-                onCancel={() => setRecording(false)}
-                onConfirm={(transcript) => {
-                  setRecording(false);
-                  if (!transcript) {
-                    setVoiceNote("No speech picked up.");
-                    return;
-                  }
-                  setVoiceNote("");
-                  setDraft((current) => (current.trim() ? `${current.trim()} ${transcript}` : transcript));
-                }}
-                onError={(message) => {
-                  setRecording(false);
-                  setVoiceNote(message);
-                }}
-              />
-            ) : (
-              <>
+            <>
                 <label htmlFor="prompt" className="sr-only">
                   {asking ? "Your answer" : promptMode ? promptPlaceholder : "Describe what you're building"}
                 </label>
@@ -338,12 +400,12 @@ export function HomeStudio({
                 />
                 <button
                   type="button"
-                  aria-label="Dictate"
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-700 hover:bg-neutral-100"
-                  onClick={() => {
-                    setVoiceNote("");
-                    setRecording(true);
-                  }}
+                  aria-label={agent.active ? "End the voice conversation" : "Talk to Abacus"}
+                  aria-pressed={agent.active}
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+                    agent.active ? "bg-black text-white" : "text-neutral-700 hover:bg-neutral-100"
+                  }`}
+                  onClick={() => void talk()}
                 >
                   <MicIcon />
                 </button>
@@ -355,12 +417,11 @@ export function HomeStudio({
                 >
                   <ArrowUpIcon />
                 </button>
-              </>
-            )}
+            </>
           </form>
-          {voiceNote ? (
+          {note ? (
             <p className="px-4 pt-3 text-sm text-neutral-500" aria-live="polite">
-              {voiceNote}
+              {note}
             </p>
           ) : null}
           {open ? (
@@ -385,6 +446,14 @@ export function HomeStudio({
                         <QuestionCard item={item} onPick={(choice) => reply(item.id, choice)} />
                       </div>
                     ) : null,
+                  )}
+                </div>
+              ) : latestDone?.kind === "breakdown" ? (
+                <div data-turn="">
+                  {latestDone.result ? (
+                    <CostBreakdown breakdown={latestDone.result} />
+                  ) : (
+                    <p className="text-[15px] text-neutral-500">Couldn&apos;t reach the price data. Try again in a moment.</p>
                   )}
                 </div>
               ) : latestDone?.kind === "estimate" && latestDone.answer ? (
@@ -415,6 +484,45 @@ export function HomeStudio({
 }
 
 const REFERENCE_COUNT = 158;
+
+// The live model occasionally leaks a code block into its transcript; it isn't speech, so hide it.
+function spoken(text: string) {
+  return text.replace(/```[\s\S]*?(```|$)/g, "").replace(/\s+/g, " ").trim();
+}
+
+
+function VoiceCaption({
+  state,
+  caption,
+  idle,
+  compact = false,
+}: {
+  state: "idle" | "connecting" | "live" | "thinking";
+  caption: Caption | null;
+  idle: string;
+  compact?: boolean;
+}) {
+  const text =
+    state === "idle"
+      ? idle
+      : state === "connecting"
+        ? "Connecting..."
+        : state === "thinking"
+          ? "Pricing it against past runs..."
+          : caption
+            ? spoken(caption.text)
+            : "Listening...";
+  const who = state === "live" && caption ? (caption.who === "you" ? "You" : "Abacus") : "";
+  return (
+    <p
+      aria-live="polite"
+      className={`${compact ? "truncate text-sm" : "mx-auto mt-3 line-clamp-2 min-h-12 max-w-md text-[15px] leading-6"} text-neutral-500`}
+    >
+      {who ? <span className="mr-1.5 font-medium text-neutral-900">{who}</span> : null}
+      {text}
+    </p>
+  );
+}
 
 function LoadingLook() {
   return (
@@ -523,6 +631,22 @@ async function settleChart(prompt: string, answers: string[], fallback: DemoAnsw
   const remain = MIN_SEARCH_MS - (Date.now() - started);
   if (remain > 0) await wait(remain);
   return chart ?? fallback;
+}
+
+async function requestBreakdown(task: string, models: unknown, subtasks: unknown): Promise<Breakdown | null> {
+  try {
+    const response = await fetch("/api/voice-estimate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ task, models, subtasks }),
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as Breakdown;
+    return Array.isArray(body.subtasks) ? body : null;
+  } catch {
+    return null;
+  }
 }
 
 async function requestChart(prompt: string, answers: string[]): Promise<DemoAnswer | null> {

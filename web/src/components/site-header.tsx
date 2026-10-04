@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Mascot } from "@/components/mascot";
+import { TaskCounter } from "@/components/task-counter";
 
 export function SiteHeader({ signingIn = false }: { signingIn?: boolean }) {
   function start(event: React.MouseEvent<HTMLAnchorElement>) {
@@ -25,6 +26,7 @@ export function SiteHeader({ signingIn = false }: { signingIn?: boolean }) {
           </span>
         </Link>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <TaskCounter />
           <Link
             href="/login"
             className={`rounded-full px-3 py-2 text-sm font-medium sm:px-4 ${
